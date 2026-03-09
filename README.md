@@ -37,3 +37,8 @@ go run ./cmd/api
 Health endpoints:
 - `GET /healthz`
 - `GET /v1/health`
+
+Strategy endpoint:
+- `GET /v1/strategy/snapshot`
+
+Copy `.env.example` to `.env` and adjust if needed.

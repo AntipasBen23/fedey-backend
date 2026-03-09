@@ -15,4 +15,5 @@ func NewRouter() http.Handler {
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", handlers.Healthz)
 	mux.HandleFunc("/v1/health", handlers.HealthV1)
+	mux.HandleFunc("/v1/strategy/snapshot", handlers.StrategySnapshotV1)
 }
