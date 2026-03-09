@@ -27,3 +27,13 @@ Strategy-first AI social growth engine backend in Go.
 4. Multi-variant content pipeline
 5. Automated publishing with guardrails
 6. Learning and recommendations
+
+## Local Run
+
+```bash
+go run ./cmd/api
+```
+
+Health endpoints:
+- `GET /healthz`
+- `GET /v1/health`
