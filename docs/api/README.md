@@ -10,3 +10,4 @@ Planned API groups:
 - `/v1/publishing`
 - `/v1/analytics`
 - `/v1/recommendations`
+- `/v1/experiments`

@@ -41,4 +41,10 @@ Health endpoints:
 Strategy endpoint:
 - `GET /v1/strategy/snapshot`
 
+Experiments endpoints:
+- `POST /v1/experiments`
+- `GET /v1/experiments`
+- `PATCH /v1/experiments/{id}/status`
+
 Copy `.env.example` to `.env` and adjust if needed.
+If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.

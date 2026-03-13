@@ -11,15 +11,27 @@ import (
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/internal/common/config"
+	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 )
 
 func main() {
 	cfg := config.Load()
+	ctx := context.Background()
+
+	experimentRepository, closeRepository, err := experiments.NewRepository(ctx, cfg.DatabaseURL())
+	if err != nil {
+		log.Fatalf("failed to initialize experiment repository: %v", err)
+	}
+	defer closeRepository()
+
+	experimentService := experiments.NewService(experimentRepository)
 
 	httpServer := &http.Server{
-		Addr:         cfg.APIAddress(),
-		Handler:      server.NewRouter(),
+		Addr: cfg.APIAddress(),
+		Handler: server.NewRouter(server.Dependencies{
+			ExperimentService: experimentService,
+		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
