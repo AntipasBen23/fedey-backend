@@ -11,3 +11,4 @@ Planned API groups:
 - `/v1/analytics`
 - `/v1/recommendations`
 - `/v1/experiments`
+- `/v1/analytics/events`

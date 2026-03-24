@@ -27,3 +27,14 @@ CREATE TABLE IF NOT EXISTS experiment_variants (
 );
 
 CREATE INDEX IF NOT EXISTS idx_experiment_variants_experiment_id ON experiment_variants(experiment_id);
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+    variant TEXT NOT NULL,
+    value DOUBLE PRECISION NOT NULL CHECK (value >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_events_experiment_id ON analytics_events(experiment_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_variant ON analytics_events(variant);

@@ -19,6 +19,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	experimentsHandler := handlers.NewExperimentsHandler(deps.ExperimentService)
+	analyticsHandler := handlers.NewAnalyticsHandler(deps.ExperimentService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
@@ -27,4 +28,5 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)
 	mux.HandleFunc("PATCH /v1/experiments/{id}/status", experimentsHandler.PatchStatus)
+	mux.HandleFunc("POST /v1/analytics/events", analyticsHandler.RecordEvent)
 }

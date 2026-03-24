@@ -12,12 +12,14 @@ type MemoryRepository struct {
 	mu      sync.RWMutex
 	byID    map[string]Experiment
 	ordered []string
+	metrics map[string][]RecordMetricInput
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		byID:    make(map[string]Experiment),
 		ordered: make([]string, 0),
+		metrics: make(map[string][]RecordMetricInput),
 	}
 }
 
@@ -69,4 +71,33 @@ func (r *MemoryRepository) UpdateStatus(_ context.Context, experimentID string, 
 	r.byID[experimentID] = experiment
 
 	return experiment, nil
+}
+
+func (r *MemoryRepository) RecordMetric(_ context.Context, input RecordMetricInput) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.byID[input.ExperimentID]; !ok {
+		return ErrExperimentNotFound
+	}
+
+	r.metrics[input.ExperimentID] = append(r.metrics[input.ExperimentID], input)
+	return nil
+}
+
+func (r *MemoryRepository) GetSummaries(_ context.Context, experimentIDs []string) (map[string]Summary, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	summaries := make(map[string]Summary, len(experimentIDs))
+	for _, experimentID := range experimentIDs {
+		events := r.metrics[experimentID]
+		if len(events) == 0 {
+			continue
+		}
+
+		summaries[experimentID] = buildSummary(events)
+	}
+
+	return summaries, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -139,4 +140,89 @@ func (r *PostgresRepository) UpdateStatus(
 	}
 
 	return experiment, nil
+}
+
+func (r *PostgresRepository) RecordMetric(ctx context.Context, input RecordMetricInput) error {
+	const existsQuery = `SELECT EXISTS (SELECT 1 FROM experiments WHERE id = $1)`
+	var exists bool
+	if err := r.pool.QueryRow(ctx, existsQuery, input.ExperimentID).Scan(&exists); err != nil {
+		return fmt.Errorf("check experiment existence: %w", err)
+	}
+	if !exists {
+		return ErrExperimentNotFound
+	}
+
+	const query = `
+		INSERT INTO analytics_events (id, experiment_id, variant, value, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+
+	_, err := r.pool.Exec(
+		ctx,
+		query,
+		"evt-"+uuid.NewString(),
+		input.ExperimentID,
+		strings.ToUpper(input.Variant),
+		input.Value,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("insert analytics event: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) GetSummaries(ctx context.Context, experimentIDs []string) (map[string]Summary, error) {
+	if len(experimentIDs) == 0 {
+		return map[string]Summary{}, nil
+	}
+
+	const query = `
+		SELECT experiment_id, variant, COUNT(*) AS events_count, COALESCE(SUM(value), 0) AS total_value
+		FROM analytics_events
+		WHERE experiment_id = ANY($1)
+		GROUP BY experiment_id, variant
+		ORDER BY experiment_id, total_value DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query, experimentIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query analytics summaries: %w", err)
+	}
+	defer rows.Close()
+
+	grouped := make(map[string][]RecordMetricInput)
+	for rows.Next() {
+		var experimentID string
+		var variant string
+		var eventsCount int
+		var totalValue float64
+		if err := rows.Scan(&experimentID, &variant, &eventsCount, &totalValue); err != nil {
+			return nil, fmt.Errorf("scan analytics summary: %w", err)
+		}
+
+		average := 0.0
+		if eventsCount > 0 {
+			average = totalValue / float64(eventsCount)
+		}
+
+		for range eventsCount {
+			grouped[experimentID] = append(grouped[experimentID], RecordMetricInput{
+				ExperimentID: experimentID,
+				Variant:      variant,
+				Value:        average,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate analytics summaries: %w", err)
+	}
+
+	summaries := make(map[string]Summary, len(grouped))
+	for experimentID, events := range grouped {
+		summaries[experimentID] = buildSummary(events)
+	}
+
+	return summaries, nil
 }
