@@ -10,27 +10,35 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/common/config"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
+	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 )
 
 func main() {
 	cfg := config.Load()
 	ctx := context.Background()
 
-	experimentRepository, closeRepository, err := experiments.NewRepository(ctx, cfg.DatabaseURL())
+	pool, err := postgresstorage.OpenPool(ctx, cfg.DatabaseURL())
 	if err != nil {
-		log.Fatalf("failed to initialize experiment repository: %v", err)
+		log.Fatalf("failed to initialize database pool: %v", err)
 	}
-	defer closeRepository()
+	if pool != nil {
+		defer pool.Close()
+	}
 
+	experimentRepository := experiments.NewRepository(pool)
 	experimentService := experiments.NewService(experimentRepository)
+	brandMemoryRepository := brandmemory.NewRepository(pool)
+	brandMemoryService := brandmemory.NewService(brandMemoryRepository)
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),
 		Handler: server.NewRouter(server.Dependencies{
-			ExperimentService: experimentService,
+			ExperimentService:  experimentService,
+			BrandMemoryService: brandMemoryService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

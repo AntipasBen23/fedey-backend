@@ -49,5 +49,9 @@ Experiments endpoints:
 Analytics endpoint:
 - `POST /v1/analytics/events`
 
+Brand memory endpoints:
+- `GET /v1/brand-memory`
+- `PUT /v1/brand-memory`
+
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.

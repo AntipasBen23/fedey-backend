@@ -16,22 +16,8 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func NewPostgresRepository(ctx context.Context, databaseURL string) (*PostgresRepository, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("create pgx pool: %w", err)
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping postgres: %w", err)
-	}
-
-	return &PostgresRepository{pool: pool}, nil
-}
-
-func (r *PostgresRepository) Close() {
-	r.pool.Close()
+func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
+	return &PostgresRepository{pool: pool}
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Experiment, error) {

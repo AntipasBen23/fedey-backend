@@ -1,4 +1,4 @@
-package experiments
+package brandmemory
 
 import "github.com/jackc/pgx/v5/pgxpool"
 

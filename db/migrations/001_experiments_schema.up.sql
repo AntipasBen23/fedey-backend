@@ -6,6 +6,16 @@ CREATE TABLE IF NOT EXISTS hypotheses (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS brand_memory (
+    id TEXT PRIMARY KEY,
+    brand_name TEXT NOT NULL,
+    tone TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    pillars TEXT[] NOT NULL DEFAULT '{}',
+    guardrails TEXT[] NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,
