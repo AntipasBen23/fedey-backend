@@ -2,30 +2,38 @@ package content
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
 )
+
+var ErrInvalidVariantRequest = errors.New("invalid content variant generation request")
 
 type Service struct {
 	repository         Repository
 	brandMemoryService *brandmemory.Service
 	trendService       *trends.Service
+	experimentService  *experiments.Service
 }
 
 func NewService(
 	repository Repository,
 	brandMemoryService *brandmemory.Service,
 	trendService *trends.Service,
+	experimentService *experiments.Service,
 ) *Service {
 	return &Service{
 		repository:         repository,
 		brandMemoryService: brandMemoryService,
 		trendService:       trendService,
+		experimentService:  experimentService,
 	}
 }
 
@@ -50,6 +58,43 @@ func (s *Service) Generate(ctx context.Context) ([]Draft, error) {
 	}
 
 	return drafts, nil
+}
+
+func (s *Service) GenerateVariants(ctx context.Context, draftID string) (Draft, error) {
+	if strings.TrimSpace(draftID) == "" {
+		return Draft{}, ErrInvalidVariantRequest
+	}
+
+	draft, err := s.repository.GetByID(ctx, strings.TrimSpace(draftID))
+	if err != nil {
+		return Draft{}, err
+	}
+
+	if draft.ExperimentID != "" && len(draft.Variants) > 0 {
+		return draft, nil
+	}
+
+	experiment, err := s.experimentService.Create(ctx, experiments.CreateInput{
+		HypothesisID: "content-" + draft.ID,
+		Metric:       "engagement_rate",
+	})
+	if err != nil {
+		return Draft{}, fmt.Errorf("create linked experiment: %w", err)
+	}
+
+	variants := buildVariants(draft)
+	draft.ExperimentID = experiment.ID
+	draft.Variants = variants
+	draft.Status = "variant_ready"
+
+	if err := s.repository.Update(ctx, draft); err != nil {
+		return Draft{}, err
+	}
+	if err := s.repository.SaveVariants(ctx, experiment.ID, variants); err != nil {
+		return Draft{}, err
+	}
+
+	return draft, nil
 }
 
 func buildDrafts(profile brandmemory.Profile, signals []trends.Signal) []Draft {
@@ -125,4 +170,27 @@ func firstValue(items []string, fallback string) string {
 	}
 
 	return items[0]
+}
+
+func buildVariants(draft Draft) []Variant {
+	return []Variant{
+		{
+			Label: "A",
+			Hook:  draft.Hook,
+			Body:  draft.Body,
+			Angle: "Baseline explanatory angle",
+		},
+		{
+			Label: "B",
+			Hook:  "What most teams miss about this trend",
+			Body:  draft.Body + "\n\nThe test here is whether a sharper contrarian opening earns more engagement.",
+			Angle: "Contrarian hook",
+		},
+		{
+			Label: "C",
+			Hook:  "A practical playbook for acting on this signal",
+			Body:  draft.Body + "\n\nThis version leans into operator steps and implementation detail.",
+			Angle: "Tactical playbook hook",
+		},
+	}
 }

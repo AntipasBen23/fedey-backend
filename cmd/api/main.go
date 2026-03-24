@@ -38,7 +38,7 @@ func main() {
 	trendRepository := trends.NewRepository(pool)
 	trendService := trends.NewService(trendRepository)
 	contentRepository := content.NewRepository(pool)
-	contentService := content.NewService(contentRepository, brandMemoryService, trendService)
+	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS content_drafts (
     body TEXT NOT NULL,
     rationale TEXT NOT NULL,
     source_trend TEXT NOT NULL,
+    experiment_id TEXT NULL REFERENCES experiments(id),
     status TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

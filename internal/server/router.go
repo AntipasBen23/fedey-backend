@@ -40,6 +40,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /v1/trends", trendsHandler.Create)
 	mux.HandleFunc("GET /v1/content/drafts", contentHandler.ListDrafts)
 	mux.HandleFunc("POST /v1/content/drafts/generate", contentHandler.GenerateDrafts)
+	mux.HandleFunc("POST /v1/content/drafts/{id}/variants/generate", contentHandler.GenerateVariants)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)
