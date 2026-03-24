@@ -28,6 +28,19 @@ CREATE TABLE IF NOT EXISTS trend_signals (
 
 CREATE INDEX IF NOT EXISTS idx_trend_signals_relevance ON trend_signals(relevance DESC, observed_at DESC);
 
+CREATE TABLE IF NOT EXISTS content_drafts (
+    id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL,
+    hook TEXT NOT NULL,
+    body TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    source_trend TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_content_drafts_created_at ON content_drafts(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

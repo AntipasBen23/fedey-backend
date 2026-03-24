@@ -57,5 +57,9 @@ Trend endpoints:
 - `GET /v1/trends`
 - `POST /v1/trends`
 
+Content endpoints:
+- `GET /v1/content/drafts`
+- `POST /v1/content/drafts/generate`
+
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.

@@ -1,0 +1,128 @@
+package content
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/trends"
+)
+
+type Service struct {
+	repository         Repository
+	brandMemoryService *brandmemory.Service
+	trendService       *trends.Service
+}
+
+func NewService(
+	repository Repository,
+	brandMemoryService *brandmemory.Service,
+	trendService *trends.Service,
+) *Service {
+	return &Service{
+		repository:         repository,
+		brandMemoryService: brandMemoryService,
+		trendService:       trendService,
+	}
+}
+
+func (s *Service) List(ctx context.Context) ([]Draft, error) {
+	return s.repository.List(ctx)
+}
+
+func (s *Service) Generate(ctx context.Context) ([]Draft, error) {
+	profile, err := s.brandMemoryService.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get brand memory: %w", err)
+	}
+
+	signals, err := s.trendService.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list trend signals: %w", err)
+	}
+
+	drafts := buildDrafts(profile, signals)
+	if err := s.repository.SaveBatch(ctx, drafts); err != nil {
+		return nil, err
+	}
+
+	return drafts, nil
+}
+
+func buildDrafts(profile brandmemory.Profile, signals []trends.Signal) []Draft {
+	now := time.Now().UTC()
+	if len(signals) == 0 {
+		return []Draft{
+			{
+				ID:          "draft-" + uuid.NewString(),
+				Channel:     "x",
+				Hook:        fmt.Sprintf("%s is not just a tool idea. It is an operator for growth.", profile.BrandName),
+				Body:        fmt.Sprintf("Most teams still treat AI like a caption helper. We are building %s to behave like a social media manager that observes, plans, experiments, and learns.", profile.BrandName),
+				Rationale:   "Evergreen draft generated because no trend signals are available.",
+				SourceTrend: "evergreen",
+				Status:      "draft",
+				CreatedAt:   now,
+			},
+		}
+	}
+
+	limit := 3
+	if len(signals) < limit {
+		limit = len(signals)
+	}
+
+	channels := []string{"x", "linkedin", "instagram"}
+	drafts := make([]Draft, 0, limit)
+	for index := 0; index < limit; index++ {
+		signal := signals[index]
+		channel := channels[index%len(channels)]
+
+		drafts = append(drafts, Draft{
+			ID:          "draft-" + uuid.NewString(),
+			Channel:     channel,
+			Hook:        fmt.Sprintf("Trend signal: %s is opening a content angle for %s.", signal.Topic, profile.BrandName),
+			Body:        buildBody(profile, signal, channel),
+			Rationale:   fmt.Sprintf("Generated from %s with relevance %.0f%% and velocity %d.", signal.Source, signal.Relevance*100, signal.Velocity),
+			SourceTrend: signal.Topic,
+			Status:      "draft",
+			CreatedAt:   now.Add(time.Duration(index) * time.Minute),
+		})
+	}
+
+	return drafts
+}
+
+func buildBody(profile brandmemory.Profile, signal trends.Signal, channel string) string {
+	switch channel {
+	case "linkedin":
+		return fmt.Sprintf(
+			"Teams are starting to ask a sharper question: what does it look like when %s is handled by an AI operator instead of a content assistant? We think the answer is a system that can observe %s, turn that into experiments, and learn what the audience actually responds to.",
+			firstValue(profile.Pillars, "social growth"),
+			signal.Topic,
+		)
+	case "instagram":
+		return fmt.Sprintf(
+			"Carousel idea:\n1. %s is trending\n2. Why it matters to %s\n3. The experiment we would run this week\n4. The guardrail: %s",
+			signal.Topic,
+			profile.Audience,
+			firstValue(profile.Guardrails, "Stay useful, not spammy."),
+		)
+	default:
+		return fmt.Sprintf(
+			"People are talking about %s.\n\nHere is the interesting part: the real opportunity is not just posting about it. It is building a system that can test angles around it, measure response, and compound what works for %s.",
+			signal.Topic,
+			profile.BrandName,
+		)
+	}
+}
+
+func firstValue(items []string, fallback string) string {
+	if len(items) == 0 {
+		return fallback
+	}
+
+	return items[0]
+}
