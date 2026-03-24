@@ -13,3 +13,4 @@ Planned API groups:
 - `/v1/experiments`
 - `/v1/analytics/events`
 - `/v1/brand-memory`
+- `/v1/trends`

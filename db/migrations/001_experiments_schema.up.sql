@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS brand_memory (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS trend_signals (
+    id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    source TEXT NOT NULL,
+    angle TEXT NOT NULL,
+    velocity INTEGER NOT NULL CHECK (velocity >= 0),
+    relevance DOUBLE PRECISION NOT NULL CHECK (relevance >= 0 AND relevance <= 1),
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trend_signals_relevance ON trend_signals(relevance DESC, observed_at DESC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

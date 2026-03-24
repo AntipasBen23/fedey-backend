@@ -53,5 +53,9 @@ Brand memory endpoints:
 - `GET /v1/brand-memory`
 - `PUT /v1/brand-memory`
 
+Trend endpoints:
+- `GET /v1/trends`
+- `POST /v1/trends`
+
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.

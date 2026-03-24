@@ -15,6 +15,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
+	"github.com/AntipasBen23/fedey-backend/internal/trends"
 )
 
 func main() {
@@ -33,12 +34,15 @@ func main() {
 	experimentService := experiments.NewService(experimentRepository)
 	brandMemoryRepository := brandmemory.NewRepository(pool)
 	brandMemoryService := brandmemory.NewService(brandMemoryRepository)
+	trendRepository := trends.NewRepository(pool)
+	trendService := trends.NewService(trendRepository)
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),
 		Handler: server.NewRouter(server.Dependencies{
 			ExperimentService:  experimentService,
 			BrandMemoryService: brandMemoryService,
+			TrendService:       trendService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

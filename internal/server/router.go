@@ -6,11 +6,13 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/server/handlers"
+	"github.com/AntipasBen23/fedey-backend/internal/trends"
 )
 
 type Dependencies struct {
 	ExperimentService  *experiments.Service
 	BrandMemoryService *brandmemory.Service
+	TrendService       *trends.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -23,12 +25,16 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	experimentsHandler := handlers.NewExperimentsHandler(deps.ExperimentService)
 	analyticsHandler := handlers.NewAnalyticsHandler(deps.ExperimentService)
 	brandMemoryHandler := handlers.NewBrandMemoryHandler(deps.BrandMemoryService)
+	trendsHandler := handlers.NewTrendsHandler(deps.TrendService)
+	strategyHandler := handlers.NewStrategyHandler(deps.BrandMemoryService, deps.TrendService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
-	mux.HandleFunc("GET /v1/strategy/snapshot", handlers.StrategySnapshotV1)
+	mux.HandleFunc("GET /v1/strategy/snapshot", strategyHandler.GetSnapshot)
 	mux.HandleFunc("GET /v1/brand-memory", brandMemoryHandler.Get)
 	mux.HandleFunc("PUT /v1/brand-memory", brandMemoryHandler.Upsert)
+	mux.HandleFunc("GET /v1/trends", trendsHandler.List)
+	mux.HandleFunc("POST /v1/trends", trendsHandler.Create)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)
