@@ -41,6 +41,14 @@ func (s *Service) List(ctx context.Context) ([]Draft, error) {
 	return s.repository.List(ctx)
 }
 
+func (s *Service) GetByID(ctx context.Context, draftID string) (Draft, error) {
+	if strings.TrimSpace(draftID) == "" {
+		return Draft{}, ErrInvalidVariantRequest
+	}
+
+	return s.repository.GetByID(ctx, strings.TrimSpace(draftID))
+}
+
 func (s *Service) Generate(ctx context.Context) ([]Draft, error) {
 	profile, err := s.brandMemoryService.Get(ctx)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/common/config"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
@@ -39,6 +40,8 @@ func main() {
 	trendService := trends.NewService(trendRepository)
 	contentRepository := content.NewRepository(pool)
 	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
+	publishingRepository := publishing.NewRepository(pool)
+	publishingService := publishing.NewService(publishingRepository, contentService)
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),
@@ -47,6 +50,7 @@ func main() {
 			BrandMemoryService: brandMemoryService,
 			TrendService:       trendService,
 			ContentService:     contentService,
+			PublishingService:  publishingService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

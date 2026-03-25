@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS content_drafts (
 
 CREATE INDEX IF NOT EXISTS idx_content_drafts_created_at ON content_drafts(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS publishing_schedules (
+    id TEXT PRIMARY KEY,
+    draft_id TEXT NOT NULL REFERENCES content_drafts(id) ON DELETE CASCADE,
+    variant_label TEXT NULL,
+    channel TEXT NOT NULL,
+    scheduled_for TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL,
+    published_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_publishing_schedules_scheduled_for ON publishing_schedules(scheduled_for ASC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

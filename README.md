@@ -62,5 +62,10 @@ Content endpoints:
 - `POST /v1/content/drafts/generate`
 - `POST /v1/content/drafts/{id}/variants/generate`
 
+Publishing endpoints:
+- `GET /v1/publishing/schedules`
+- `POST /v1/publishing/schedules`
+- `PATCH /v1/publishing/schedules/{id}/publish`
+
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.
