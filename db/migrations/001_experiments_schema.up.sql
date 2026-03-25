@@ -55,6 +55,21 @@ CREATE TABLE IF NOT EXISTS publishing_schedules (
 
 CREATE INDEX IF NOT EXISTS idx_publishing_schedules_scheduled_for ON publishing_schedules(scheduled_for ASC);
 
+CREATE TABLE IF NOT EXISTS community_inbox (
+    id TEXT PRIMARY KEY,
+    platform TEXT NOT NULL,
+    author TEXT NOT NULL,
+    message TEXT NOT NULL,
+    sentiment TEXT NOT NULL,
+    reply_draft TEXT NULL,
+    linked_post_ref TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    replied_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_inbox_created_at ON community_inbox(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

@@ -17,3 +17,4 @@ Planned API groups:
 - `/v1/content/drafts`
 - `/v1/content/drafts/{id}/variants/generate`
 - `/v1/publishing/schedules`
+- `/v1/community/inbox`

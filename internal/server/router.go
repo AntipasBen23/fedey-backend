@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
@@ -17,6 +18,7 @@ type Dependencies struct {
 	TrendService       *trends.Service
 	ContentService     *content.Service
 	PublishingService  *publishing.Service
+	CommunityService   *community.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -33,6 +35,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	strategyHandler := handlers.NewStrategyHandler(deps.BrandMemoryService, deps.TrendService)
 	contentHandler := handlers.NewContentHandler(deps.ContentService)
 	publishingHandler := handlers.NewPublishingHandler(deps.PublishingService)
+	communityHandler := handlers.NewCommunityHandler(deps.CommunityService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
@@ -47,6 +50,10 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /v1/publishing/schedules", publishingHandler.ListSchedules)
 	mux.HandleFunc("POST /v1/publishing/schedules", publishingHandler.CreateSchedule)
 	mux.HandleFunc("PATCH /v1/publishing/schedules/{id}/publish", publishingHandler.MarkPublished)
+	mux.HandleFunc("GET /v1/community/inbox", communityHandler.ListInbox)
+	mux.HandleFunc("POST /v1/community/inbox", communityHandler.CreateInboxItem)
+	mux.HandleFunc("POST /v1/community/inbox/{id}/draft-reply", communityHandler.DraftReply)
+	mux.HandleFunc("PATCH /v1/community/inbox/{id}/reply", communityHandler.MarkReplied)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)
