@@ -29,6 +29,7 @@ type Config struct {
 	linkedinRedirectURI string
 	webAppURL           string
 	publishWindows      string
+	encryptionKey       string
 }
 
 func Load() Config {
@@ -48,6 +49,7 @@ func Load() Config {
 		linkedinRedirectURI: getEnv("FEDEY_LINKEDIN_REDIRECT_URI", ""),
 		webAppURL:           getEnv("FEDEY_WEB_APP_URL", defaultWebAppURL),
 		publishWindows:      getEnv("FEDEY_PUBLISH_WINDOWS", defaultPublishWindows),
+		encryptionKey:       os.Getenv("FEDEY_ENCRYPTION_KEY"),
 	}
 }
 
@@ -105,6 +107,10 @@ func (c Config) WebAppURL() string {
 
 func (c Config) PublishWindows() string {
 	return c.publishWindows
+}
+
+func (c Config) EncryptionKey() string {
+	return c.encryptionKey
 }
 
 func getEnv(key, fallback string) string {

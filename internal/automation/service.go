@@ -7,32 +7,40 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
+	"github.com/AntipasBen23/fedey-backend/internal/trends"
 )
 
 type Service struct {
-	repository        Repository
-	contentService    *content.Service
-	publishingService *publishing.Service
-	communityService  *community.Service
-	settings          Settings
+	repository         Repository
+	brandMemoryService *brandmemory.Service
+	trendService       *trends.Service
+	contentService     *content.Service
+	publishingService  *publishing.Service
+	communityService   *community.Service
+	settings           Settings
 }
 
 func NewService(
 	repository Repository,
+	brandMemoryService *brandmemory.Service,
+	trendService *trends.Service,
 	contentService *content.Service,
 	publishingService *publishing.Service,
 	communityService *community.Service,
 	settings Settings,
 ) *Service {
 	return &Service{
-		repository:        repository,
-		contentService:    contentService,
-		publishingService: publishingService,
-		communityService:  communityService,
-		settings:          settings,
+		repository:         repository,
+		brandMemoryService: brandMemoryService,
+		trendService:       trendService,
+		contentService:     contentService,
+		publishingService:  publishingService,
+		communityService:   communityService,
+		settings:           settings,
 	}
 }
 
@@ -59,6 +67,16 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 	run.PostsPublished = len(publishedSchedules)
 
+	if s.trendService != nil && s.brandMemoryService != nil {
+		profile, err := s.brandMemoryService.Get(ctx)
+		if err == nil {
+			signals, err := s.trendService.IngestDefaults(ctx, profile)
+			if err == nil {
+				run.SignalsIngested = len(signals)
+			}
+		}
+	}
+
 	generatedDrafts, err := s.contentService.Generate(ctx)
 	if err != nil {
 		return Run{}, fmt.Errorf("generate drafts: %w", err)
@@ -68,6 +86,10 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	mentionsSynced, err := s.communityService.SyncXMentions(ctx)
 	if err == nil {
 		run.MentionsSynced = mentionsSynced
+	}
+	linkedinCommentsSynced, err := s.communityService.SyncLinkedInComments(ctx)
+	if err == nil {
+		run.MentionsSynced += linkedinCommentsSynced
 	}
 
 	allDrafts, err := s.contentService.List(ctx)
@@ -119,8 +141,9 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	run.Notes = fmt.Sprintf(
-		"Published %d posts, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
+		"Published %d posts, ingested %d live signals, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
 		run.PostsPublished,
+		run.SignalsIngested,
 		run.DraftsGenerated,
 		run.SchedulesCreated,
 		run.MentionsSynced,

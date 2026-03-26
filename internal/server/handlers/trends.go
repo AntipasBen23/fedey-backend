@@ -47,3 +47,23 @@ func (h *TrendsHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, item)
 }
+
+func (h *TrendsHandler) Ingest(w http.ResponseWriter, r *http.Request) {
+	var request trends.LiveIngestInput
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	items, err := h.service.IngestLive(r.Context(), request)
+	if errors.Is(err, trends.ErrInvalidSignalInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to ingest live trend signals")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"items": items})
+}

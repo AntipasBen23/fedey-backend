@@ -12,6 +12,7 @@ type Run struct {
 	DraftsGenerated  int       `json:"draftsGenerated"`
 	SchedulesCreated int       `json:"schedulesCreated"`
 	PostsPublished   int       `json:"postsPublished"`
+	SignalsIngested  int       `json:"signalsIngested"`
 	MentionsSynced   int       `json:"mentionsSynced"`
 	RepliesDrafted   int       `json:"repliesDrafted"`
 	TriggeredBy      string    `json:"triggeredBy"`

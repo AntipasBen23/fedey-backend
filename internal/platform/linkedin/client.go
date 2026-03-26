@@ -33,6 +33,13 @@ type Member struct {
 	LastName  string
 }
 
+type Comment struct {
+	ID        string
+	ActorURN  string
+	Message   string
+	ObjectURN string
+}
+
 func NewClient(apiBaseURL string) *Client {
 	return &Client{
 		apiBaseURL: strings.TrimRight(strings.TrimSpace(apiBaseURL), "/"),
@@ -156,6 +163,110 @@ func (c *Client) CreatePost(ctx context.Context, accessToken, authorURN, comment
 	}
 	if err := json.NewDecoder(response.Body).Decode(&result); err == nil && strings.TrimSpace(result.ID) != "" {
 		return result.ID, nil
+	}
+
+	return "", nil
+}
+
+func (c *Client) ListComments(ctx context.Context, accessToken, targetURN string, maxCount int) ([]Comment, error) {
+	endpoint := fmt.Sprintf("%s/rest/socialActions/%s/comments", c.apiBaseURL, url.PathEscape(strings.TrimSpace(targetURN)))
+	if maxCount > 0 {
+		endpoint += fmt.Sprintf("?count=%d", maxCount)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build linkedin list comments request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+	request.Header.Set("X-Restli-Protocol-Version", "2.0.0")
+	request.Header.Set("Linkedin-Version", currentLinkedInVersion)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("perform linkedin list comments request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("linkedin comment listing failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result struct {
+		Elements []struct {
+			ID      string `json:"id"`
+			Actor   string `json:"actor"`
+			Object  string `json:"object"`
+			Message struct {
+				Text string `json:"text"`
+			} `json:"message"`
+		} `json:"elements"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode linkedin comments response: %w", err)
+	}
+
+	comments := make([]Comment, 0, len(result.Elements))
+	for _, item := range result.Elements {
+		comments = append(comments, Comment{
+			ID:        item.ID,
+			ActorURN:  item.Actor,
+			Message:   item.Message.Text,
+			ObjectURN: item.Object,
+		})
+	}
+
+	return comments, nil
+}
+
+func (c *Client) CreateComment(ctx context.Context, accessToken, actorURN, objectURN, targetURN, message, parentCommentURN string) (string, error) {
+	payload := map[string]any{
+		"actor":  strings.TrimSpace(actorURN),
+		"object": strings.TrimSpace(objectURN),
+		"message": map[string]string{
+			"text": strings.TrimSpace(message),
+		},
+	}
+	if strings.TrimSpace(parentCommentURN) != "" {
+		payload["parentComment"] = strings.TrimSpace(parentCommentURN)
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal linkedin comment payload: %w", err)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/rest/socialActions/%s/comments", c.apiBaseURL, url.PathEscape(strings.TrimSpace(targetURN))), bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build linkedin comment request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Restli-Protocol-Version", "2.0.0")
+	request.Header.Set("Linkedin-Version", currentLinkedInVersion)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("perform linkedin comment request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return "", fmt.Errorf("linkedin comment create failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	commentID := strings.TrimSpace(response.Header.Get("x-restli-id"))
+	if commentID != "" {
+		return commentID, nil
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err == nil {
+		return strings.TrimSpace(result.ID), nil
 	}
 
 	return "", nil

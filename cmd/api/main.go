@@ -20,6 +20,7 @@ import (
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
+	"github.com/AntipasBen23/fedey-backend/internal/security/tokens"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
@@ -38,8 +39,13 @@ func main() {
 		defer pool.Close()
 	}
 
+	tokenCipher, err := resolveTokenCipher(cfg.EncryptionKey())
+	if err != nil {
+		log.Fatalf("failed to initialize token encryption: %v", err)
+	}
+
 	xClient := x.NewClient(cfg.XAPIBaseURL(), cfg.XAccessToken(), cfg.XUserID())
-	xAccountRepository := xaccounts.NewRepository(pool)
+	xAccountRepository := xaccounts.NewRepository(pool, tokenCipher)
 	xAccountService := xaccounts.NewService(
 		xAccountRepository,
 		xClient,
@@ -49,7 +55,7 @@ func main() {
 	)
 	linkedinClient := linkedin.NewClient(cfg.LinkedInAPIBaseURL())
 	linkedinAccountService := linkedinaccounts.NewService(
-		linkedinaccounts.NewRepository(pool),
+		linkedinaccounts.NewRepository(pool, tokenCipher),
 		linkedinClient,
 		cfg.LinkedInClientID(),
 		cfg.LinkedInClientSecret(),
@@ -68,9 +74,9 @@ func main() {
 	publishingRepository := publishing.NewRepository(pool)
 	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
-	communityService := community.NewService(communityRepository, brandMemoryService, xClient, xAccountService)
+	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	automationRepository := automation.NewRepository(pool)
-	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService, automation.Settings{
+	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
 		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
 	})
@@ -105,6 +111,14 @@ func main() {
 	}
 
 	<-shutdownDone
+}
+
+func resolveTokenCipher(key string) (tokens.Cipher, error) {
+	if key == "" {
+		return tokens.NewNoopCipher(), nil
+	}
+
+	return tokens.NewAESCipher(key)
 }
 
 func waitForShutdown(httpServer *http.Server) {

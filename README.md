@@ -62,6 +62,7 @@ Brand memory endpoints:
 Trend endpoints:
 - `GET /v1/trends`
 - `POST /v1/trends`
+- `POST /v1/trends/ingest`
 
 Content endpoints:
 - `GET /v1/content/drafts`
@@ -76,17 +77,21 @@ Publishing endpoints:
 Community endpoints:
 - `GET /v1/community/inbox`
 - `POST /v1/community/inbox`
+- `POST /v1/community/inbox/sync/x`
+- `POST /v1/community/inbox/sync/linkedin`
 - `POST /v1/community/inbox/{id}/draft-reply`
 - `PATCH /v1/community/inbox/{id}/reply`
 
 Automation endpoints:
 - `GET /v1/automation/runs`
+- `GET /v1/automation/settings`
 - `POST /v1/automation/run`
 
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.
+Set `FEDEY_ENCRYPTION_KEY` to a base64-encoded 32-byte key to encrypt stored platform access and refresh tokens at rest.
 Set `FEDEY_AUTOMATION_INTERVAL` to control scheduler cadence. Default: `1h`.
 Set `FEDEY_PUBLISH_WINDOWS` to control the timed publishing slots the scheduler targets. Default: `09:00,13:00,18:00`.
 Set `FEDEY_X_ACCESS_TOKEN` and `FEDEY_X_USER_ID` to enable real X publishing and mention ingestion.
 Set `FEDEY_X_CLIENT_ID`, `FEDEY_X_REDIRECT_URI`, and `FEDEY_WEB_APP_URL` to enable real X OAuth account connection.
-Set `FEDEY_LINKEDIN_CLIENT_ID`, `FEDEY_LINKEDIN_CLIENT_SECRET`, and `FEDEY_LINKEDIN_REDIRECT_URI` to enable real LinkedIn OAuth account connection.
+Set `FEDEY_LINKEDIN_CLIENT_ID`, `FEDEY_LINKEDIN_CLIENT_SECRET`, and `FEDEY_LINKEDIN_REDIRECT_URI` to enable real LinkedIn OAuth account connection. LinkedIn comment ingestion also requires `r_member_social` access on your LinkedIn app.

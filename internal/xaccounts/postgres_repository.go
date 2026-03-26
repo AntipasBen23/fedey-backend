@@ -5,16 +5,22 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AntipasBen23/fedey-backend/internal/security/tokens"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgresRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher tokens.Cipher
 }
 
-func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{pool: pool}
+func NewPostgresRepository(pool *pgxpool.Pool, cipher tokens.Cipher) *PostgresRepository {
+	if cipher == nil {
+		cipher = tokens.NewNoopCipher()
+	}
+
+	return &PostgresRepository{pool: pool, cipher: cipher}
 }
 
 func (r *PostgresRepository) GetActive(ctx context.Context) (Account, error) {
@@ -45,6 +51,13 @@ func (r *PostgresRepository) GetActive(ctx context.Context) (Account, error) {
 		return Account{}, fmt.Errorf("get x account: %w", err)
 	}
 
+	if account.AccessToken, err = r.cipher.Decrypt(account.AccessToken); err != nil {
+		return Account{}, fmt.Errorf("decrypt x access token: %w", err)
+	}
+	if account.RefreshToken, err = r.cipher.Decrypt(account.RefreshToken); err != nil {
+		return Account{}, fmt.Errorf("decrypt x refresh token: %w", err)
+	}
+
 	return account, nil
 }
 
@@ -63,15 +76,24 @@ func (r *PostgresRepository) UpsertActive(ctx context.Context, account Account) 
 		    connected_at = EXCLUDED.connected_at
 	`
 
-	_, err := r.pool.Exec(
+	encryptedAccessToken, err := r.cipher.Encrypt(account.AccessToken)
+	if err != nil {
+		return fmt.Errorf("encrypt x access token: %w", err)
+	}
+	encryptedRefreshToken, err := r.cipher.Encrypt(account.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("encrypt x refresh token: %w", err)
+	}
+
+	_, err = r.pool.Exec(
 		ctx,
 		query,
 		account.ID,
 		account.Provider,
 		account.UserID,
 		account.Username,
-		account.AccessToken,
-		account.RefreshToken,
+		encryptedAccessToken,
+		encryptedRefreshToken,
 		account.Scopes,
 		account.TokenType,
 		account.ExpiresAt,

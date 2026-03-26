@@ -63,7 +63,7 @@ func (s *Service) StartAuth(ctx context.Context) (string, error) {
 	params.Set("client_id", s.clientID)
 	params.Set("redirect_uri", s.redirectURI)
 	params.Set("state", state)
-	params.Set("scope", "r_liteprofile w_member_social")
+	params.Set("scope", "r_liteprofile r_member_social w_member_social")
 
 	return "https://www.linkedin.com/oauth/v2/authorization?" + params.Encode(), nil
 }

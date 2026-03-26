@@ -60,6 +60,20 @@ func (h *CommunityHandler) SyncXMentions(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, map[string]int{"created": created})
 }
 
+func (h *CommunityHandler) SyncLinkedInComments(w http.ResponseWriter, r *http.Request) {
+	created, err := h.service.SyncLinkedInComments(r.Context())
+	if errors.Is(err, community.ErrInvalidInboxInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to sync linkedin comments")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]int{"created": created})
+}
+
 func (h *CommunityHandler) DraftReply(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.DraftReply(r.Context(), r.PathValue("id"))
 	if errors.Is(err, community.ErrInvalidInboxInput) {

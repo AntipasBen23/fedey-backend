@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
     drafts_generated INTEGER NOT NULL,
     schedules_created INTEGER NOT NULL,
     posts_published INTEGER NOT NULL DEFAULT 0,
+    signals_ingested INTEGER NOT NULL DEFAULT 0,
     mentions_synced INTEGER NOT NULL,
     replies_drafted INTEGER NOT NULL,
     triggered_by TEXT NOT NULL,

@@ -15,6 +15,7 @@ import (
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
+	"github.com/AntipasBen23/fedey-backend/internal/security/tokens"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
 	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
@@ -37,9 +38,14 @@ func main() {
 		defer pool.Close()
 	}
 
+	tokenCipher, err := resolveTokenCipher(cfg.EncryptionKey())
+	if err != nil {
+		log.Fatalf("failed to initialize token encryption: %v", err)
+	}
+
 	xClient := x.NewClient(cfg.XAPIBaseURL(), cfg.XAccessToken(), cfg.XUserID())
 	xAccountService := xaccounts.NewService(
-		xaccounts.NewRepository(pool),
+		xaccounts.NewRepository(pool, tokenCipher),
 		xClient,
 		cfg.XClientID(),
 		cfg.XRedirectURI(),
@@ -47,7 +53,7 @@ func main() {
 	)
 	linkedinClient := linkedin.NewClient(cfg.LinkedInAPIBaseURL())
 	linkedinAccountService := linkedinaccounts.NewService(
-		linkedinaccounts.NewRepository(pool),
+		linkedinaccounts.NewRepository(pool, tokenCipher),
 		linkedinClient,
 		cfg.LinkedInClientID(),
 		cfg.LinkedInClientSecret(),
@@ -60,8 +66,8 @@ func main() {
 	trendService := trends.NewService(trends.NewRepository(pool))
 	contentService := content.NewService(content.NewRepository(pool), brandMemoryService, trendService, experimentService)
 	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	communityService := community.NewService(community.NewRepository(pool), brandMemoryService, xClient, xAccountService)
-	automationService := automation.NewService(automation.NewRepository(pool), contentService, publishingService, communityService, automation.Settings{
+	communityService := community.NewService(community.NewRepository(pool), brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	automationService := automation.NewService(automation.NewRepository(pool), brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
 		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
 	})
@@ -91,4 +97,12 @@ func runOnce(ctx context.Context, automationService *automation.Service) {
 		run.SchedulesCreated,
 		run.RepliesDrafted,
 	)
+}
+
+func resolveTokenCipher(key string) (tokens.Cipher, error) {
+	if key == "" {
+		return tokens.NewNoopCipher(), nil
+	}
+
+	return tokens.NewAESCipher(key)
 }

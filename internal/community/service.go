@@ -7,23 +7,40 @@ import (
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	linkedinplatform "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
+	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
 type Service struct {
 	repository         Repository
 	brandMemoryService *brandmemory.Service
+	publishingService  *publishing.Service
 	xClient            *xplatform.Client
 	xAccountService    *xaccounts.Service
+	linkedinClient     *linkedinplatform.Client
+	linkedinService    *linkedinaccounts.Service
 }
 
-func NewService(repository Repository, brandMemoryService *brandmemory.Service, xClient *xplatform.Client, xAccountService *xaccounts.Service) *Service {
+func NewService(
+	repository Repository,
+	brandMemoryService *brandmemory.Service,
+	publishingService *publishing.Service,
+	xClient *xplatform.Client,
+	xAccountService *xaccounts.Service,
+	linkedinClient *linkedinplatform.Client,
+	linkedinService *linkedinaccounts.Service,
+) *Service {
 	return &Service{
 		repository:         repository,
 		brandMemoryService: brandMemoryService,
+		publishingService:  publishingService,
 		xClient:            xClient,
 		xAccountService:    xAccountService,
+		linkedinClient:     linkedinClient,
+		linkedinService:    linkedinService,
 	}
 }
 
@@ -97,6 +114,21 @@ func (s *Service) MarkReplied(ctx context.Context, itemID string) (Item, error) 
 			return Item{}, err
 		}
 	}
+	if strings.EqualFold(item.Platform, "linkedin") {
+		if s.linkedinClient == nil || s.linkedinService == nil || strings.TrimSpace(item.LinkedPostRef) == "" || strings.TrimSpace(item.ExternalCommentID) == "" || strings.TrimSpace(item.ReplyDraft) == "" {
+			return Item{}, ErrInvalidInboxInput
+		}
+
+		account, err := s.linkedinService.GetActive(ctx)
+		if err != nil {
+			return Item{}, err
+		}
+
+		parentCommentURN := buildLinkedInCommentURN(item.LinkedPostRef, item.ExternalCommentID)
+		if _, err := s.linkedinClient.CreateComment(ctx, account.AccessToken, account.AuthorURN, item.LinkedPostRef, item.LinkedPostRef, item.ReplyDraft, parentCommentURN); err != nil {
+			return Item{}, err
+		}
+	}
 
 	item.Status = StatusReplied
 	item.RepliedAt = time.Now().UTC()
@@ -122,6 +154,70 @@ func (s *Service) SyncXMentions(ctx context.Context) (int, error) {
 	}
 
 	return s.syncMentionsWithAccount(ctx, account)
+}
+
+func (s *Service) SyncLinkedInComments(ctx context.Context) (int, error) {
+	if s.linkedinClient == nil || s.linkedinService == nil || s.publishingService == nil {
+		return 0, ErrInvalidInboxInput
+	}
+
+	account, err := s.linkedinService.GetActive(ctx)
+	if err != nil {
+		return 0, ErrInvalidInboxInput
+	}
+
+	schedules, err := s.publishingService.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	existing, err := s.repository.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	known := make(map[string]struct{}, len(existing))
+	for _, item := range existing {
+		if item.ExternalCommentID != "" {
+			known["linkedin:"+item.ExternalCommentID] = struct{}{}
+		}
+	}
+
+	created := 0
+	for _, schedule := range schedules {
+		if !strings.EqualFold(schedule.Channel, "linkedin") || schedule.Status != publishing.StatusPublished || strings.TrimSpace(schedule.PlatformPostID) == "" {
+			continue
+		}
+
+		threadURN := normalizeLinkedInThreadURN(schedule.PlatformPostID)
+		comments, err := s.linkedinClient.ListComments(ctx, account.AccessToken, threadURN, 10)
+		if err != nil {
+			return created, err
+		}
+
+		for _, comment := range comments {
+			key := "linkedin:" + comment.ID
+			if _, exists := known[key]; exists {
+				continue
+			}
+
+			_, err := s.repository.Create(ctx, CreateInput{
+				Platform:          "linkedin",
+				Author:            firstNonEmpty(comment.ActorURN, "linkedin_member"),
+				Message:           firstNonEmpty(comment.Message, "New LinkedIn comment"),
+				Sentiment:         "neutral",
+				LinkedPostRef:     threadURN,
+				ExternalCommentID: comment.ID,
+			})
+			if err != nil {
+				return created, err
+			}
+			known[key] = struct{}{}
+			created++
+		}
+	}
+
+	return created, nil
 }
 
 func (s *Service) syncMentionsWithAccount(ctx context.Context, account xaccounts.Account) (int, error) {
@@ -192,6 +288,19 @@ func firstNonEmpty(value, fallback string) string {
 	}
 
 	return value
+}
+
+func normalizeLinkedInThreadURN(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "urn:") {
+		return trimmed
+	}
+
+	return "urn:li:ugcPost:" + trimmed
+}
+
+func buildLinkedInCommentURN(objectURN, commentID string) string {
+	return fmt.Sprintf("urn:li:comment:(%s,%s)", strings.TrimSpace(objectURN), strings.TrimSpace(commentID))
 }
 
 func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {
