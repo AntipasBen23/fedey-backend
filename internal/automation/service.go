@@ -51,6 +51,11 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 	run.DraftsGenerated = len(generatedDrafts)
 
+	mentionsSynced, err := s.communityService.SyncXMentions(ctx)
+	if err == nil {
+		run.MentionsSynced = mentionsSynced
+	}
+
 	allDrafts, err := s.contentService.List(ctx)
 	if err != nil {
 		return Run{}, fmt.Errorf("list drafts: %w", err)
@@ -95,9 +100,10 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	run.Notes = fmt.Sprintf(
-		"Generated %d drafts, created %d schedule, drafted %d replies.",
+		"Generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
 		run.DraftsGenerated,
 		run.SchedulesCreated,
+		run.MentionsSynced,
 		run.RepliesDrafted,
 	)
 

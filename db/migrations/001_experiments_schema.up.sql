@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS publishing_schedules (
     draft_id TEXT NOT NULL REFERENCES content_drafts(id) ON DELETE CASCADE,
     variant_label TEXT NULL,
     channel TEXT NOT NULL,
+    platform_post_id TEXT NULL,
     scheduled_for TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL,
     published_at TIMESTAMPTZ NULL,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS community_inbox (
     sentiment TEXT NOT NULL,
     reply_draft TEXT NULL,
     linked_post_ref TEXT NOT NULL,
+    external_comment_id TEXT NULL,
     status TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     replied_at TIMESTAMPTZ NULL
@@ -75,6 +77,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
     status TEXT NOT NULL,
     drafts_generated INTEGER NOT NULL,
     schedules_created INTEGER NOT NULL,
+    mentions_synced INTEGER NOT NULL,
     replies_drafted INTEGER NOT NULL,
     triggered_by TEXT NOT NULL,
     notes TEXT NOT NULL,

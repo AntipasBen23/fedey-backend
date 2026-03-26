@@ -16,6 +16,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
@@ -34,6 +35,8 @@ func main() {
 		defer pool.Close()
 	}
 
+	xClient := x.NewClient(cfg.XAPIBaseURL(), cfg.XAccessToken(), cfg.XUserID())
+
 	experimentRepository := experiments.NewRepository(pool)
 	experimentService := experiments.NewService(experimentRepository)
 	brandMemoryRepository := brandmemory.NewRepository(pool)
@@ -43,9 +46,9 @@ func main() {
 	contentRepository := content.NewRepository(pool)
 	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
 	publishingRepository := publishing.NewRepository(pool)
-	publishingService := publishing.NewService(publishingRepository, contentService)
+	publishingService := publishing.NewService(publishingRepository, contentService, xClient)
 	communityRepository := community.NewRepository(pool)
-	communityService := community.NewService(communityRepository, brandMemoryService)
+	communityService := community.NewService(communityRepository, brandMemoryService, xClient)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService)
 

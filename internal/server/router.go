@@ -55,6 +55,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("PATCH /v1/publishing/schedules/{id}/publish", publishingHandler.MarkPublished)
 	mux.HandleFunc("GET /v1/community/inbox", communityHandler.ListInbox)
 	mux.HandleFunc("POST /v1/community/inbox", communityHandler.CreateInboxItem)
+	mux.HandleFunc("POST /v1/community/inbox/sync/x", communityHandler.SyncXMentions)
 	mux.HandleFunc("POST /v1/community/inbox/{id}/draft-reply", communityHandler.DraftReply)
 	mux.HandleFunc("PATCH /v1/community/inbox/{id}/reply", communityHandler.MarkReplied)
 	mux.HandleFunc("GET /v1/automation/runs", automationHandler.ListRuns)

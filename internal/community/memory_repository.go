@@ -18,14 +18,15 @@ func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		items: []Item{
 			{
-				ID:            "cmt-1",
-				Platform:      "x",
-				Author:        "founder_ops",
-				Message:       "This is exactly the kind of AI social operator stack I have been looking for. How would you keep replies on-brand?",
-				Sentiment:     "positive",
-				LinkedPostRef: "sch-1",
-				Status:        StatusPending,
-				CreatedAt:     now.Add(-35 * time.Minute),
+				ID:                "cmt-1",
+				Platform:          "x",
+				Author:            "founder_ops",
+				Message:           "This is exactly the kind of AI social operator stack I have been looking for. How would you keep replies on-brand?",
+				Sentiment:         "positive",
+				LinkedPostRef:     "sch-1",
+				ExternalCommentID: "191-demo",
+				Status:            StatusPending,
+				CreatedAt:         now.Add(-35 * time.Minute),
 			},
 		},
 	}
@@ -47,14 +48,15 @@ func (r *MemoryRepository) Create(_ context.Context, input CreateInput) (Item, e
 	defer r.mu.Unlock()
 
 	item := Item{
-		ID:            fmt.Sprintf("cmt-%d", time.Now().UTC().UnixNano()),
-		Platform:      input.Platform,
-		Author:        input.Author,
-		Message:       input.Message,
-		Sentiment:     input.Sentiment,
-		LinkedPostRef: input.LinkedPostRef,
-		Status:        StatusPending,
-		CreatedAt:     time.Now().UTC(),
+		ID:                fmt.Sprintf("cmt-%d", time.Now().UTC().UnixNano()),
+		Platform:          input.Platform,
+		Author:            input.Author,
+		Message:           input.Message,
+		Sentiment:         input.Sentiment,
+		LinkedPostRef:     input.LinkedPostRef,
+		ExternalCommentID: input.ExternalCommentID,
+		Status:            StatusPending,
+		CreatedAt:         time.Now().UTC(),
 	}
 
 	r.items = append(r.items, item)

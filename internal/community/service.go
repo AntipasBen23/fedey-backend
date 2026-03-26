@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 )
 
 type Service struct {
 	repository         Repository
 	brandMemoryService *brandmemory.Service
+	xClient            *xplatform.Client
 }
 
-func NewService(repository Repository, brandMemoryService *brandmemory.Service) *Service {
+func NewService(repository Repository, brandMemoryService *brandmemory.Service, xClient *xplatform.Client) *Service {
 	return &Service{
 		repository:         repository,
 		brandMemoryService: brandMemoryService,
+		xClient:            xClient,
 	}
 }
 
@@ -34,11 +37,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Item, error) {
 	}
 
 	return s.repository.Create(ctx, CreateInput{
-		Platform:      strings.TrimSpace(input.Platform),
-		Author:        strings.TrimSpace(input.Author),
-		Message:       strings.TrimSpace(input.Message),
-		Sentiment:     normalizeSentiment(input.Sentiment),
-		LinkedPostRef: strings.TrimSpace(input.LinkedPostRef),
+		Platform:          strings.TrimSpace(input.Platform),
+		Author:            strings.TrimSpace(input.Author),
+		Message:           strings.TrimSpace(input.Message),
+		Sentiment:         normalizeSentiment(input.Sentiment),
+		LinkedPostRef:     strings.TrimSpace(input.LinkedPostRef),
+		ExternalCommentID: strings.TrimSpace(input.ExternalCommentID),
 	})
 }
 
@@ -76,6 +80,16 @@ func (s *Service) MarkReplied(ctx context.Context, itemID string) (Item, error) 
 		return Item{}, err
 	}
 
+	if strings.EqualFold(item.Platform, "x") {
+		if s.xClient == nil || !s.xClient.Configured() || strings.TrimSpace(item.ExternalCommentID) == "" || strings.TrimSpace(item.ReplyDraft) == "" {
+			return Item{}, ErrInvalidInboxInput
+		}
+
+		if _, err := s.xClient.PublishPost(ctx, item.ReplyDraft, item.ExternalCommentID); err != nil {
+			return Item{}, err
+		}
+	}
+
 	item.Status = StatusReplied
 	item.RepliedAt = time.Now().UTC()
 	if err := s.repository.Update(ctx, item); err != nil {
@@ -83,6 +97,51 @@ func (s *Service) MarkReplied(ctx context.Context, itemID string) (Item, error) 
 	}
 
 	return item, nil
+}
+
+func (s *Service) SyncXMentions(ctx context.Context) (int, error) {
+	if s.xClient == nil || !s.xClient.Configured() {
+		return 0, ErrInvalidInboxInput
+	}
+
+	mentions, err := s.xClient.FetchMentions(ctx, 10)
+	if err != nil {
+		return 0, err
+	}
+
+	existing, err := s.repository.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	known := make(map[string]struct{}, len(existing))
+	for _, item := range existing {
+		if item.ExternalCommentID != "" {
+			known[item.ExternalCommentID] = struct{}{}
+		}
+	}
+
+	created := 0
+	for _, mention := range mentions {
+		if _, exists := known[mention.ID]; exists {
+			continue
+		}
+
+		_, err := s.repository.Create(ctx, CreateInput{
+			Platform:          "x",
+			Author:            firstNonEmpty(mention.Author, "x_user"),
+			Message:           mention.Text,
+			Sentiment:         "neutral",
+			LinkedPostRef:     mention.ID,
+			ExternalCommentID: mention.ID,
+		})
+		if err != nil {
+			return created, err
+		}
+		created++
+	}
+
+	return created, nil
 }
 
 func normalizeSentiment(value string) string {
@@ -104,4 +163,12 @@ func buildReply(profile brandmemory.Profile, item Item) string {
 	default:
 		return base + " The reply logic should use the same brand memory and strategy context that drives the posts, so the tone stays consistent."
 	}
+}
+
+func firstNonEmpty(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+
+	return value
 }

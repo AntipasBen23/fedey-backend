@@ -21,7 +21,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Item, error) {
 	const query = `
-		SELECT id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
+		SELECT id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, COALESCE(external_comment_id, ''), status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
 		FROM community_inbox
 		ORDER BY created_at DESC
 	`
@@ -43,6 +43,7 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Item, error) {
 			&item.Sentiment,
 			&item.ReplyDraft,
 			&item.LinkedPostRef,
+			&item.ExternalCommentID,
 			&item.Status,
 			&item.CreatedAt,
 			&item.RepliedAt,
@@ -61,9 +62,9 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Item, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Item, error) {
 	const query = `
-		INSERT INTO community_inbox (id, platform, author, message, sentiment, linked_post_ref, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
+		INSERT INTO community_inbox (id, platform, author, message, sentiment, linked_post_ref, external_comment_id, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, COALESCE(external_comment_id, ''), status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
 	`
 
 	var item Item
@@ -76,6 +77,7 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Ite
 		input.Message,
 		input.Sentiment,
 		input.LinkedPostRef,
+		nullString(input.ExternalCommentID),
 		StatusPending,
 		time.Now().UTC(),
 	).Scan(
@@ -86,6 +88,7 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Ite
 		&item.Sentiment,
 		&item.ReplyDraft,
 		&item.LinkedPostRef,
+		&item.ExternalCommentID,
 		&item.Status,
 		&item.CreatedAt,
 		&item.RepliedAt,
@@ -106,9 +109,10 @@ func (r *PostgresRepository) Update(ctx context.Context, item Item) error {
 		    sentiment = $4,
 		    reply_draft = $5,
 		    linked_post_ref = $6,
-		    status = $7,
-		    replied_at = $8
-		WHERE id = $9
+		    external_comment_id = $7,
+		    status = $8,
+		    replied_at = $9
+		WHERE id = $10
 	`
 
 	commandTag, err := r.pool.Exec(
@@ -120,6 +124,7 @@ func (r *PostgresRepository) Update(ctx context.Context, item Item) error {
 		item.Sentiment,
 		nullReply(item.ReplyDraft),
 		item.LinkedPostRef,
+		nullReply(item.ExternalCommentID),
 		item.Status,
 		nullTime(item.RepliedAt),
 		item.ID,
@@ -136,7 +141,7 @@ func (r *PostgresRepository) Update(ctx context.Context, item Item) error {
 
 func (r *PostgresRepository) GetByID(ctx context.Context, id string) (Item, error) {
 	const query = `
-		SELECT id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
+		SELECT id, platform, author, message, sentiment, COALESCE(reply_draft, ''), linked_post_ref, COALESCE(external_comment_id, ''), status, created_at, COALESCE(replied_at, TIMESTAMPTZ '0001-01-01')
 		FROM community_inbox
 		WHERE id = $1
 	`
@@ -150,6 +155,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id string) (Item, erro
 		&item.Sentiment,
 		&item.ReplyDraft,
 		&item.LinkedPostRef,
+		&item.ExternalCommentID,
 		&item.Status,
 		&item.CreatedAt,
 		&item.RepliedAt,
@@ -173,6 +179,13 @@ func nullReply(value string) any {
 
 func nullTime(value time.Time) any {
 	if value.IsZero() {
+		return nil
+	}
+	return value
+}
+
+func nullString(value string) any {
+	if value == "" {
 		return nil
 	}
 	return value

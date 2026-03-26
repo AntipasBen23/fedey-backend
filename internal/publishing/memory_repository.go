@@ -48,7 +48,20 @@ func (r *MemoryRepository) Create(_ context.Context, input CreateInput) (Schedul
 	return item, nil
 }
 
-func (r *MemoryRepository) MarkPublished(_ context.Context, scheduleID string) (Schedule, error) {
+func (r *MemoryRepository) GetByID(_ context.Context, scheduleID string) (Schedule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, item := range r.schedules {
+		if item.ID == scheduleID {
+			return item, nil
+		}
+	}
+
+	return Schedule{}, ErrScheduleNotFound
+}
+
+func (r *MemoryRepository) MarkPublished(_ context.Context, scheduleID string, platformPostID string) (Schedule, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -58,6 +71,7 @@ func (r *MemoryRepository) MarkPublished(_ context.Context, scheduleID string) (
 		}
 
 		r.schedules[index].Status = StatusPublished
+		r.schedules[index].PlatformPostID = platformPostID
 		r.schedules[index].PublishedAt = time.Now().UTC()
 		return r.schedules[index], nil
 	}

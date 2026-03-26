@@ -21,7 +21,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Schedule, error) {
 	const query = `
-		SELECT id, draft_id, COALESCE(variant_label, ''), channel, scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
+		SELECT id, draft_id, COALESCE(variant_label, ''), channel, COALESCE(platform_post_id, ''), scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
 		FROM publishing_schedules
 		ORDER BY scheduled_for ASC
 	`
@@ -40,6 +40,7 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Schedule, error) {
 			&item.DraftID,
 			&item.VariantLabel,
 			&item.Channel,
+			&item.PlatformPostID,
 			&item.ScheduledFor,
 			&item.Status,
 			&item.PublishedAt,
@@ -57,11 +58,40 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Schedule, error) {
 	return items, nil
 }
 
+func (r *PostgresRepository) GetByID(ctx context.Context, scheduleID string) (Schedule, error) {
+	const query = `
+		SELECT id, draft_id, COALESCE(variant_label, ''), channel, COALESCE(platform_post_id, ''), scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
+		FROM publishing_schedules
+		WHERE id = $1
+	`
+
+	var item Schedule
+	err := r.pool.QueryRow(ctx, query, scheduleID).Scan(
+		&item.ID,
+		&item.DraftID,
+		&item.VariantLabel,
+		&item.Channel,
+		&item.PlatformPostID,
+		&item.ScheduledFor,
+		&item.Status,
+		&item.PublishedAt,
+		&item.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Schedule{}, ErrScheduleNotFound
+	}
+	if err != nil {
+		return Schedule{}, fmt.Errorf("get publishing schedule: %w", err)
+	}
+
+	return item, nil
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Schedule, error) {
 	const query = `
 		INSERT INTO publishing_schedules (id, draft_id, variant_label, channel, scheduled_for, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, draft_id, COALESCE(variant_label, ''), channel, scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
+		RETURNING id, draft_id, COALESCE(variant_label, ''), channel, COALESCE(platform_post_id, ''), scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
 	`
 
 	now := time.Now().UTC()
@@ -81,6 +111,7 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Sch
 		&item.DraftID,
 		&item.VariantLabel,
 		&item.Channel,
+		&item.PlatformPostID,
 		&item.ScheduledFor,
 		&item.Status,
 		&item.PublishedAt,
@@ -93,12 +124,12 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Sch
 	return item, nil
 }
 
-func (r *PostgresRepository) MarkPublished(ctx context.Context, scheduleID string) (Schedule, error) {
+func (r *PostgresRepository) MarkPublished(ctx context.Context, scheduleID string, platformPostID string) (Schedule, error) {
 	const query = `
 		UPDATE publishing_schedules
-		SET status = $1, published_at = $2
-		WHERE id = $3
-		RETURNING id, draft_id, COALESCE(variant_label, ''), channel, scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
+		SET status = $1, platform_post_id = $2, published_at = $3
+		WHERE id = $4
+		RETURNING id, draft_id, COALESCE(variant_label, ''), channel, COALESCE(platform_post_id, ''), scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
 	`
 
 	var item Schedule
@@ -106,6 +137,7 @@ func (r *PostgresRepository) MarkPublished(ctx context.Context, scheduleID strin
 		ctx,
 		query,
 		StatusPublished,
+		nullString(platformPostID),
 		time.Now().UTC(),
 		scheduleID,
 	).Scan(
@@ -113,6 +145,7 @@ func (r *PostgresRepository) MarkPublished(ctx context.Context, scheduleID strin
 		&item.DraftID,
 		&item.VariantLabel,
 		&item.Channel,
+		&item.PlatformPostID,
 		&item.ScheduledFor,
 		&item.Status,
 		&item.PublishedAt,

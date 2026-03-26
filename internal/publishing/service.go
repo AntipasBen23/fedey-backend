@@ -6,17 +6,20 @@ import (
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/internal/content"
+	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 )
 
 type Service struct {
 	repository     Repository
 	contentService *content.Service
+	xClient        *xplatform.Client
 }
 
-func NewService(repository Repository, contentService *content.Service) *Service {
+func NewService(repository Repository, contentService *content.Service, xClient *xplatform.Client) *Service {
 	return &Service{
 		repository:     repository,
 		contentService: contentService,
+		xClient:        xClient,
 	}
 }
 
@@ -55,7 +58,30 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 		return Schedule{}, ErrInvalidScheduleInput
 	}
 
-	return s.repository.MarkPublished(ctx, strings.TrimSpace(scheduleID))
+	schedule, err := s.repository.GetByID(ctx, strings.TrimSpace(scheduleID))
+	if err != nil {
+		return Schedule{}, err
+	}
+
+	platformPostID := ""
+	if strings.EqualFold(schedule.Channel, "x") {
+		if s.xClient == nil || !s.xClient.Configured() {
+			return Schedule{}, ErrInvalidScheduleInput
+		}
+
+		draft, err := s.contentService.GetByID(ctx, schedule.DraftID)
+		if err != nil {
+			return Schedule{}, err
+		}
+
+		postID, err := s.xClient.PublishPost(ctx, buildPublishText(draft, schedule.VariantLabel), "")
+		if err != nil {
+			return Schedule{}, err
+		}
+		platformPostID = postID
+	}
+
+	return s.repository.MarkPublished(ctx, strings.TrimSpace(scheduleID), platformPostID)
 }
 
 func hasVariant(draft content.Draft, label string) bool {
@@ -67,4 +93,16 @@ func hasVariant(draft content.Draft, label string) bool {
 	}
 
 	return false
+}
+
+func buildPublishText(draft content.Draft, variantLabel string) string {
+	if strings.TrimSpace(variantLabel) != "" {
+		for _, variant := range draft.Variants {
+			if strings.EqualFold(variant.Label, variantLabel) {
+				return variant.Hook + "\n\n" + variant.Body
+			}
+		}
+	}
+
+	return draft.Hook + "\n\n" + draft.Body
 }

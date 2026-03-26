@@ -10,14 +10,15 @@ const (
 )
 
 type Schedule struct {
-	ID           string    `json:"id"`
-	DraftID      string    `json:"draftId"`
-	VariantLabel string    `json:"variantLabel,omitempty"`
-	Channel      string    `json:"channel"`
-	ScheduledFor time.Time `json:"scheduledFor"`
-	Status       Status    `json:"status"`
-	PublishedAt  time.Time `json:"publishedAt,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	DraftID        string    `json:"draftId"`
+	VariantLabel   string    `json:"variantLabel,omitempty"`
+	Channel        string    `json:"channel"`
+	PlatformPostID string    `json:"platformPostId,omitempty"`
+	ScheduledFor   time.Time `json:"scheduledFor"`
+	Status         Status    `json:"status"`
+	PublishedAt    time.Time `json:"publishedAt,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type CreateInput struct {

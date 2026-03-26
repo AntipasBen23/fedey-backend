@@ -17,7 +17,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Run, error) {
 	const query = `
-		SELECT id, status, drafts_generated, schedules_created, replies_drafted, triggered_by, notes, created_at
+		SELECT id, status, drafts_generated, schedules_created, mentions_synced, replies_drafted, triggered_by, notes, created_at
 		FROM automation_runs
 		ORDER BY created_at DESC
 	`
@@ -36,6 +36,7 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Run, error) {
 			&run.Status,
 			&run.DraftsGenerated,
 			&run.SchedulesCreated,
+			&run.MentionsSynced,
 			&run.RepliesDrafted,
 			&run.TriggeredBy,
 			&run.Notes,
@@ -55,8 +56,8 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Run, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, run Run) error {
 	const query = `
-		INSERT INTO automation_runs (id, status, drafts_generated, schedules_created, replies_drafted, triggered_by, notes, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO automation_runs (id, status, drafts_generated, schedules_created, mentions_synced, replies_drafted, triggered_by, notes, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	_, err := r.pool.Exec(
@@ -66,6 +67,7 @@ func (r *PostgresRepository) Create(ctx context.Context, run Run) error {
 		run.Status,
 		run.DraftsGenerated,
 		run.SchedulesCreated,
+		run.MentionsSynced,
 		run.RepliesDrafted,
 		run.TriggeredBy,
 		run.Notes,

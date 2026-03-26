@@ -11,6 +11,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
@@ -33,12 +34,14 @@ func main() {
 		defer pool.Close()
 	}
 
+	xClient := x.NewClient(cfg.XAPIBaseURL(), cfg.XAccessToken(), cfg.XUserID())
+
 	experimentService := experiments.NewService(experiments.NewRepository(pool))
 	brandMemoryService := brandmemory.NewService(brandmemory.NewRepository(pool))
 	trendService := trends.NewService(trends.NewRepository(pool))
 	contentService := content.NewService(content.NewRepository(pool), brandMemoryService, trendService, experimentService)
-	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService)
-	communityService := community.NewService(community.NewRepository(pool), brandMemoryService)
+	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService, xClient)
+	communityService := community.NewService(community.NewRepository(pool), brandMemoryService, xClient)
 	automationService := automation.NewService(automation.NewRepository(pool), contentService, publishingService, communityService)
 
 	log.Printf("scheduler started with interval %s", interval)

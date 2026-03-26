@@ -11,22 +11,24 @@ const (
 )
 
 type Item struct {
-	ID            string    `json:"id"`
-	Platform      string    `json:"platform"`
-	Author        string    `json:"author"`
-	Message       string    `json:"message"`
-	Sentiment     string    `json:"sentiment"`
-	ReplyDraft    string    `json:"replyDraft,omitempty"`
-	LinkedPostRef string    `json:"linkedPostRef"`
-	Status        Status    `json:"status"`
-	CreatedAt     time.Time `json:"createdAt"`
-	RepliedAt     time.Time `json:"repliedAt,omitempty"`
+	ID                string    `json:"id"`
+	Platform          string    `json:"platform"`
+	Author            string    `json:"author"`
+	Message           string    `json:"message"`
+	Sentiment         string    `json:"sentiment"`
+	ReplyDraft        string    `json:"replyDraft,omitempty"`
+	LinkedPostRef     string    `json:"linkedPostRef"`
+	ExternalCommentID string    `json:"externalCommentId,omitempty"`
+	Status            Status    `json:"status"`
+	CreatedAt         time.Time `json:"createdAt"`
+	RepliedAt         time.Time `json:"repliedAt,omitempty"`
 }
 
 type CreateInput struct {
-	Platform      string `json:"platform"`
-	Author        string `json:"author"`
-	Message       string `json:"message"`
-	Sentiment     string `json:"sentiment"`
-	LinkedPostRef string `json:"linkedPostRef"`
+	Platform          string `json:"platform"`
+	Author            string `json:"author"`
+	Message           string `json:"message"`
+	Sentiment         string `json:"sentiment"`
+	LinkedPostRef     string `json:"linkedPostRef"`
+	ExternalCommentID string `json:"externalCommentId"`
 }
