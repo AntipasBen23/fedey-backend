@@ -87,3 +87,4 @@ Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.
 Set `FEDEY_AUTOMATION_INTERVAL` to control scheduler cadence. Default: `1h`.
 Set `FEDEY_X_ACCESS_TOKEN` and `FEDEY_X_USER_ID` to enable real X publishing and mention ingestion.
+Set `FEDEY_X_CLIENT_ID`, `FEDEY_X_REDIRECT_URI`, and `FEDEY_WEB_APP_URL` to enable real X OAuth account connection.

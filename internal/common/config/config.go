@@ -7,6 +7,7 @@ const (
 	defaultPort               = "8080"
 	defaultAutomationInterval = "1h"
 	defaultXAPIBaseURL        = "https://api.x.com"
+	defaultWebAppURL          = "http://localhost:3000"
 )
 
 // Config keeps runtime settings loaded from environment variables.
@@ -18,6 +19,9 @@ type Config struct {
 	xAPIBaseURL        string
 	xAccessToken       string
 	xUserID            string
+	xClientID          string
+	xRedirectURI       string
+	webAppURL          string
 }
 
 func Load() Config {
@@ -29,6 +33,9 @@ func Load() Config {
 		xAPIBaseURL:        getEnv("FEDEY_X_API_BASE_URL", defaultXAPIBaseURL),
 		xAccessToken:       os.Getenv("FEDEY_X_ACCESS_TOKEN"),
 		xUserID:            os.Getenv("FEDEY_X_USER_ID"),
+		xClientID:          os.Getenv("FEDEY_X_CLIENT_ID"),
+		xRedirectURI:       os.Getenv("FEDEY_X_REDIRECT_URI"),
+		webAppURL:          getEnv("FEDEY_WEB_APP_URL", defaultWebAppURL),
 	}
 }
 
@@ -54,6 +61,18 @@ func (c Config) XAccessToken() string {
 
 func (c Config) XUserID() string {
 	return c.xUserID
+}
+
+func (c Config) XClientID() string {
+	return c.xClientID
+}
+
+func (c Config) XRedirectURI() string {
+	return c.xRedirectURI
+}
+
+func (c Config) WebAppURL() string {
+	return c.webAppURL
 }
 
 func getEnv(key, fallback string) string {

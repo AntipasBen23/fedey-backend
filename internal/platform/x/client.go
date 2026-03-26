@@ -26,6 +26,19 @@ type Mention struct {
 	CreatedAt time.Time
 }
 
+type TokenResponse struct {
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	AccessToken  string `json:"access_token"`
+	Scope        string `json:"scope"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+type User struct {
+	ID       string
+	Username string
+}
+
 func NewClient(baseURL, accessToken, userID string) *Client {
 	return &Client{
 		baseURL:     strings.TrimRight(baseURL, "/"),
@@ -41,9 +54,90 @@ func (c *Client) Configured() bool {
 	return c.baseURL != "" && c.accessToken != "" && c.userID != ""
 }
 
+func (c *Client) AccessToken() string {
+	return c.accessToken
+}
+
+func (c *Client) UserID() string {
+	return c.userID
+}
+
+func (c *Client) ExchangeCode(ctx context.Context, clientID, redirectURI, code, codeVerifier string) (TokenResponse, error) {
+	values := url.Values{}
+	values.Set("grant_type", "authorization_code")
+	values.Set("client_id", clientID)
+	values.Set("redirect_uri", redirectURI)
+	values.Set("code", strings.TrimSpace(code))
+	values.Set("code_verifier", strings.TrimSpace(codeVerifier))
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/2/oauth2/token", strings.NewReader(values.Encode()))
+	if err != nil {
+		return TokenResponse{}, fmt.Errorf("build x token request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return TokenResponse{}, fmt.Errorf("perform x token request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return TokenResponse{}, fmt.Errorf("x token exchange failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&tokenResponse); err != nil {
+		return TokenResponse{}, fmt.Errorf("decode x token response: %w", err)
+	}
+
+	return tokenResponse, nil
+}
+
+func (c *Client) GetAuthenticatedUser(ctx context.Context, accessToken string) (User, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/2/users/me?user.fields=username", nil)
+	if err != nil {
+		return User{}, fmt.Errorf("build x me request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return User{}, fmt.Errorf("perform x me request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return User{}, fmt.Errorf("x me lookup failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result struct {
+		Data struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return User{}, fmt.Errorf("decode x me response: %w", err)
+	}
+
+	return User{
+		ID:       result.Data.ID,
+		Username: result.Data.Username,
+	}, nil
+}
+
 func (c *Client) PublishPost(ctx context.Context, text string, replyToPostID string) (string, error) {
+	return c.PublishPostWithToken(ctx, c.accessToken, text, replyToPostID)
+}
+
+func (c *Client) PublishPostWithToken(ctx context.Context, accessToken, text string, replyToPostID string) (string, error) {
 	if !c.Configured() {
-		return "", fmt.Errorf("x client is not configured")
+		if strings.TrimSpace(accessToken) == "" {
+			return "", fmt.Errorf("x client is not configured")
+		}
 	}
 
 	payload := map[string]any{
@@ -64,7 +158,7 @@ func (c *Client) PublishPost(ctx context.Context, text string, replyToPostID str
 	if err != nil {
 		return "", fmt.Errorf("build x publish request: %w", err)
 	}
-	request.Header.Set("Authorization", "Bearer "+c.accessToken)
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := c.httpClient.Do(request)
@@ -91,8 +185,14 @@ func (c *Client) PublishPost(ctx context.Context, text string, replyToPostID str
 }
 
 func (c *Client) FetchMentions(ctx context.Context, maxResults int) ([]Mention, error) {
+	return c.FetchMentionsWithCredentials(ctx, c.accessToken, c.userID, maxResults)
+}
+
+func (c *Client) FetchMentionsWithCredentials(ctx context.Context, accessToken, userID string, maxResults int) ([]Mention, error) {
 	if !c.Configured() {
-		return nil, fmt.Errorf("x client is not configured")
+		if strings.TrimSpace(accessToken) == "" || strings.TrimSpace(userID) == "" {
+			return nil, fmt.Errorf("x client is not configured")
+		}
 	}
 	if maxResults <= 0 {
 		maxResults = 10
@@ -104,12 +204,12 @@ func (c *Client) FetchMentions(ctx context.Context, maxResults int) ([]Mention, 
 	query.Set("user.fields", "username")
 	query.Set("tweet.fields", "created_at,author_id")
 
-	endpoint := fmt.Sprintf("%s/2/users/%s/mentions?%s", c.baseURL, c.userID, query.Encode())
+	endpoint := fmt.Sprintf("%s/2/users/%s/mentions?%s", c.baseURL, strings.TrimSpace(userID), query.Encode())
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build x mentions request: %w", err)
 	}
-	request.Header.Set("Authorization", "Bearer "+c.accessToken)
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {

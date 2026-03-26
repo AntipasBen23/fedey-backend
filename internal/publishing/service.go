@@ -7,19 +7,22 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
+	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
 type Service struct {
-	repository     Repository
-	contentService *content.Service
-	xClient        *xplatform.Client
+	repository      Repository
+	contentService  *content.Service
+	xClient         *xplatform.Client
+	xAccountService *xaccounts.Service
 }
 
-func NewService(repository Repository, contentService *content.Service, xClient *xplatform.Client) *Service {
+func NewService(repository Repository, contentService *content.Service, xClient *xplatform.Client, xAccountService *xaccounts.Service) *Service {
 	return &Service{
-		repository:     repository,
-		contentService: contentService,
-		xClient:        xClient,
+		repository:      repository,
+		contentService:  contentService,
+		xClient:         xClient,
+		xAccountService: xAccountService,
 	}
 }
 
@@ -65,7 +68,7 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 
 	platformPostID := ""
 	if strings.EqualFold(schedule.Channel, "x") {
-		if s.xClient == nil || !s.xClient.Configured() {
+		if s.xClient == nil {
 			return Schedule{}, ErrInvalidScheduleInput
 		}
 
@@ -74,7 +77,12 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 			return Schedule{}, err
 		}
 
-		postID, err := s.xClient.PublishPost(ctx, buildPublishText(draft, schedule.VariantLabel), "")
+		credentials, err := s.resolveXCredentials(ctx)
+		if err != nil {
+			return Schedule{}, err
+		}
+
+		postID, err := s.xClient.PublishPostWithToken(ctx, credentials.AccessToken, buildPublishText(draft, schedule.VariantLabel), "")
 		if err != nil {
 			return Schedule{}, err
 		}
@@ -82,6 +90,24 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 	}
 
 	return s.repository.MarkPublished(ctx, strings.TrimSpace(scheduleID), platformPostID)
+}
+
+func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {
+	if s.xAccountService != nil {
+		account, err := s.xAccountService.GetActive(ctx)
+		if err == nil {
+			return account, nil
+		}
+	}
+
+	if s.xClient != nil && s.xClient.Configured() {
+		return xaccounts.Account{
+			AccessToken: s.xClient.AccessToken(),
+			UserID:      s.xClient.UserID(),
+		}, nil
+	}
+
+	return xaccounts.Account{}, ErrInvalidScheduleInput
 }
 
 func hasVariant(draft content.Draft, label string) bool {

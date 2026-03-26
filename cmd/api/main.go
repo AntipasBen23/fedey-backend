@@ -21,6 +21,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/server"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
+	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
 func main() {
@@ -36,6 +37,14 @@ func main() {
 	}
 
 	xClient := x.NewClient(cfg.XAPIBaseURL(), cfg.XAccessToken(), cfg.XUserID())
+	xAccountRepository := xaccounts.NewRepository(pool)
+	xAccountService := xaccounts.NewService(
+		xAccountRepository,
+		xClient,
+		cfg.XClientID(),
+		cfg.XRedirectURI(),
+		cfg.WebAppURL(),
+	)
 
 	experimentRepository := experiments.NewRepository(pool)
 	experimentService := experiments.NewService(experimentRepository)
@@ -46,9 +55,9 @@ func main() {
 	contentRepository := content.NewRepository(pool)
 	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
 	publishingRepository := publishing.NewRepository(pool)
-	publishingService := publishing.NewService(publishingRepository, contentService, xClient)
+	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService)
 	communityRepository := community.NewRepository(pool)
-	communityService := community.NewService(communityRepository, brandMemoryService, xClient)
+	communityService := community.NewService(communityRepository, brandMemoryService, xClient, xAccountService)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService)
 
@@ -62,6 +71,7 @@ func main() {
 			PublishingService:  publishingService,
 			CommunityService:   communityService,
 			AutomationService:  automationService,
+			XAccountService:    xAccountService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

@@ -86,6 +86,25 @@ CREATE TABLE IF NOT EXISTS automation_runs (
 
 CREATE INDEX IF NOT EXISTS idx_automation_runs_created_at ON automation_runs(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS x_accounts (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    scopes TEXT[] NOT NULL DEFAULT '{}',
+    token_type TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS x_oauth_states (
+    state TEXT PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,
