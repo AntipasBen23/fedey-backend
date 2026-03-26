@@ -3,6 +3,8 @@ DROP TABLE IF EXISTS experiment_variants;
 DROP TABLE IF EXISTS experiments;
 DROP TABLE IF EXISTS x_oauth_states;
 DROP TABLE IF EXISTS x_accounts;
+DROP TABLE IF EXISTS linkedin_oauth_states;
+DROP TABLE IF EXISTS linkedin_accounts;
 DROP TABLE IF EXISTS automation_runs;
 DROP TABLE IF EXISTS community_inbox;
 DROP TABLE IF EXISTS publishing_schedules;

@@ -8,6 +8,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/server/handlers"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
@@ -23,6 +24,7 @@ type Dependencies struct {
 	CommunityService   *community.Service
 	AutomationService  *automation.Service
 	XAccountService    *xaccounts.Service
+	LinkedInService    *linkedinaccounts.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -42,6 +44,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	communityHandler := handlers.NewCommunityHandler(deps.CommunityService)
 	automationHandler := handlers.NewAutomationHandler(deps.AutomationService)
 	xAccountsHandler := handlers.NewXAccountsHandler(deps.XAccountService)
+	linkedinAccountsHandler := handlers.NewLinkedInAccountsHandler(deps.LinkedInService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
@@ -62,10 +65,14 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /v1/community/inbox/{id}/draft-reply", communityHandler.DraftReply)
 	mux.HandleFunc("PATCH /v1/community/inbox/{id}/reply", communityHandler.MarkReplied)
 	mux.HandleFunc("GET /v1/automation/runs", automationHandler.ListRuns)
+	mux.HandleFunc("GET /v1/automation/settings", automationHandler.GetSettings)
 	mux.HandleFunc("POST /v1/automation/run", automationHandler.RunOnce)
 	mux.HandleFunc("GET /v1/integrations/x/status", xAccountsHandler.Status)
 	mux.HandleFunc("GET /v1/integrations/x/connect", xAccountsHandler.StartConnect)
 	mux.HandleFunc("GET /v1/integrations/x/callback", xAccountsHandler.Callback)
+	mux.HandleFunc("GET /v1/integrations/linkedin/status", linkedinAccountsHandler.Status)
+	mux.HandleFunc("GET /v1/integrations/linkedin/connect", linkedinAccountsHandler.StartConnect)
+	mux.HandleFunc("GET /v1/integrations/linkedin/callback", linkedinAccountsHandler.Callback)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)

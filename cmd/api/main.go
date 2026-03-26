@@ -16,6 +16,8 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/server"
@@ -45,6 +47,15 @@ func main() {
 		cfg.XRedirectURI(),
 		cfg.WebAppURL(),
 	)
+	linkedinClient := linkedin.NewClient(cfg.LinkedInAPIBaseURL())
+	linkedinAccountService := linkedinaccounts.NewService(
+		linkedinaccounts.NewRepository(pool),
+		linkedinClient,
+		cfg.LinkedInClientID(),
+		cfg.LinkedInClientSecret(),
+		cfg.LinkedInRedirectURI(),
+		cfg.WebAppURL(),
+	)
 
 	experimentRepository := experiments.NewRepository(pool)
 	experimentService := experiments.NewService(experimentRepository)
@@ -55,11 +66,14 @@ func main() {
 	contentRepository := content.NewRepository(pool)
 	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
 	publishingRepository := publishing.NewRepository(pool)
-	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService)
+	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, xClient, xAccountService)
 	automationRepository := automation.NewRepository(pool)
-	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService)
+	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService, automation.Settings{
+		Interval: cfg.AutomationInterval(),
+		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
+	})
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),
@@ -72,6 +86,7 @@ func main() {
 			CommunityService:   communityService,
 			AutomationService:  automationService,
 			XAccountService:    xAccountService,
+			LinkedInService:    linkedinAccountService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

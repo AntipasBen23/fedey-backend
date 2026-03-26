@@ -48,6 +48,24 @@ func (r *MemoryRepository) Create(_ context.Context, input CreateInput) (Schedul
 	return item, nil
 }
 
+func (r *MemoryRepository) ListDue(_ context.Context, before time.Time) ([]Schedule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var items []Schedule
+	for _, item := range r.schedules {
+		if item.Status == StatusScheduled && !item.ScheduledFor.After(before.UTC()) {
+			items = append(items, item)
+		}
+	}
+
+	slices.SortFunc(items, func(left, right Schedule) int {
+		return left.ScheduledFor.Compare(right.ScheduledFor)
+	})
+
+	return items, nil
+}
+
 func (r *MemoryRepository) GetByID(_ context.Context, scheduleID string) (Schedule, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

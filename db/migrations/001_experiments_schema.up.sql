@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
     status TEXT NOT NULL,
     drafts_generated INTEGER NOT NULL,
     schedules_created INTEGER NOT NULL,
+    posts_published INTEGER NOT NULL DEFAULT 0,
     mentions_synced INTEGER NOT NULL,
     replies_drafted INTEGER NOT NULL,
     triggered_by TEXT NOT NULL,
@@ -102,6 +103,24 @@ CREATE TABLE IF NOT EXISTS x_accounts (
 CREATE TABLE IF NOT EXISTS x_oauth_states (
     state TEXT PRIMARY KEY,
     code_verifier TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_accounts (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL UNIQUE,
+    member_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    author_urn TEXT NOT NULL,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NULL,
+    scopes TEXT[] NOT NULL DEFAULT '{}',
+    expires_at TIMESTAMPTZ NOT NULL,
+    connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_oauth_states (
+    state TEXT PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

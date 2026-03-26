@@ -24,6 +24,10 @@ func (h *AutomationHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (h *AutomationHandler) GetSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, h.service.Settings())
+}
+
 func (h *AutomationHandler) RunOnce(w http.ResponseWriter, r *http.Request) {
 	run, err := h.service.Run(r.Context(), "manual")
 	if err != nil {

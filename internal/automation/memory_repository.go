@@ -20,7 +20,9 @@ func (r *MemoryRepository) List(_ context.Context) ([]Run, error) {
 	defer r.mu.RUnlock()
 
 	items := append([]Run(nil), r.runs...)
-	slices.Reverse(items)
+	slices.SortFunc(items, func(left, right Run) int {
+		return right.CreatedAt.Compare(left.CreatedAt)
+	})
 	return items, nil
 }
 

@@ -21,6 +21,12 @@ type Schedule struct {
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
+type Window struct {
+	Hour   int    `json:"hour"`
+	Minute int    `json:"minute"`
+	Label  string `json:"label"`
+}
+
 type CreateInput struct {
 	DraftID      string    `json:"draftId"`
 	VariantLabel string    `json:"variantLabel"`

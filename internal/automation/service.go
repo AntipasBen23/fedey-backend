@@ -17,6 +17,7 @@ type Service struct {
 	contentService    *content.Service
 	publishingService *publishing.Service
 	communityService  *community.Service
+	settings          Settings
 }
 
 func NewService(
@@ -24,12 +25,14 @@ func NewService(
 	contentService *content.Service,
 	publishingService *publishing.Service,
 	communityService *community.Service,
+	settings Settings,
 ) *Service {
 	return &Service{
 		repository:        repository,
 		contentService:    contentService,
 		publishingService: publishingService,
 		communityService:  communityService,
+		settings:          settings,
 	}
 }
 
@@ -37,13 +40,24 @@ func (s *Service) List(ctx context.Context) ([]Run, error) {
 	return s.repository.List(ctx)
 }
 
+func (s *Service) Settings() Settings {
+	return s.settings
+}
+
 func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
+	now := time.Now().UTC()
 	run := Run{
 		ID:          "run-" + uuid.NewString(),
 		Status:      "completed",
 		TriggeredBy: triggeredBy,
-		CreatedAt:   time.Now().UTC(),
+		CreatedAt:   now,
 	}
+
+	publishedSchedules, err := s.publishingService.PublishDue(ctx, now)
+	if err != nil {
+		return Run{}, fmt.Errorf("publish due schedules: %w", err)
+	}
+	run.PostsPublished = len(publishedSchedules)
 
 	generatedDrafts, err := s.contentService.Generate(ctx)
 	if err != nil {
@@ -72,11 +86,16 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 			variantLabel = unscheduledDraft.Variants[1].Label
 		}
 
+		scheduledFor := now.Add(30 * time.Minute)
+		if nextWindow, ok := nextWindowAfter(now, s.settings.Windows); ok {
+			scheduledFor = nextWindow
+		}
+
 		_, err := s.publishingService.Create(ctx, publishing.CreateInput{
 			DraftID:      unscheduledDraft.ID,
 			VariantLabel: variantLabel,
 			Channel:      unscheduledDraft.Channel,
-			ScheduledFor: time.Now().UTC().Add(30 * time.Minute),
+			ScheduledFor: scheduledFor,
 		})
 		if err != nil {
 			return Run{}, fmt.Errorf("create schedule: %w", err)
@@ -100,7 +119,8 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	run.Notes = fmt.Sprintf(
-		"Generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
+		"Published %d posts, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
+		run.PostsPublished,
 		run.DraftsGenerated,
 		run.SchedulesCreated,
 		run.MentionsSynced,
@@ -112,6 +132,25 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	return run, nil
+}
+
+func nextWindowAfter(now time.Time, windows []publishing.Window) (time.Time, bool) {
+	if len(windows) == 0 {
+		return time.Time{}, false
+	}
+
+	current := now.UTC()
+	for dayOffset := 0; dayOffset < 2; dayOffset++ {
+		base := current.AddDate(0, 0, dayOffset)
+		for _, window := range windows {
+			candidate := time.Date(base.Year(), base.Month(), base.Day(), window.Hour, window.Minute, 0, 0, time.UTC)
+			if candidate.After(current) {
+				return candidate, true
+			}
+		}
+	}
+
+	return time.Time{}, false
 }
 
 func findFirstUnscheduledDraft(drafts []content.Draft, schedules []publishing.Schedule) *content.Draft {

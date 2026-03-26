@@ -32,7 +32,12 @@ func NewService(repository Repository, xClient *xplatform.Client, clientID, redi
 }
 
 func (s *Service) GetActive(ctx context.Context) (Account, error) {
-	return s.repository.GetActive(ctx)
+	account, err := s.repository.GetActive(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+
+	return s.ensureFreshToken(ctx, account)
 }
 
 func (s *Service) StartAuth(ctx context.Context) (string, error) {
@@ -119,4 +124,39 @@ func randomString(size int) (string, error) {
 func codeChallenge(verifier string) string {
 	hash := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+func (s *Service) ensureFreshToken(ctx context.Context, account Account) (Account, error) {
+	if s.xClient == nil {
+		return account, nil
+	}
+	if time.Until(account.ExpiresAt) > 5*time.Minute {
+		return account, nil
+	}
+	if strings.TrimSpace(account.RefreshToken) == "" || strings.TrimSpace(s.clientID) == "" {
+		return account, nil
+	}
+
+	tokenResponse, err := s.xClient.RefreshToken(ctx, s.clientID, account.RefreshToken)
+	if err != nil {
+		return Account{}, err
+	}
+
+	account.AccessToken = tokenResponse.AccessToken
+	if strings.TrimSpace(tokenResponse.RefreshToken) != "" {
+		account.RefreshToken = tokenResponse.RefreshToken
+	}
+	account.TokenType = tokenResponse.TokenType
+	if scopes := strings.Fields(tokenResponse.Scope); len(scopes) > 0 {
+		account.Scopes = scopes
+	}
+	if tokenResponse.ExpiresIn > 0 {
+		account.ExpiresAt = time.Now().UTC().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
+	}
+
+	if err := s.repository.UpsertActive(ctx, account); err != nil {
+		return Account{}, err
+	}
+
+	return account, nil
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
@@ -43,14 +45,26 @@ func main() {
 		cfg.XRedirectURI(),
 		cfg.WebAppURL(),
 	)
+	linkedinClient := linkedin.NewClient(cfg.LinkedInAPIBaseURL())
+	linkedinAccountService := linkedinaccounts.NewService(
+		linkedinaccounts.NewRepository(pool),
+		linkedinClient,
+		cfg.LinkedInClientID(),
+		cfg.LinkedInClientSecret(),
+		cfg.LinkedInRedirectURI(),
+		cfg.WebAppURL(),
+	)
 
 	experimentService := experiments.NewService(experiments.NewRepository(pool))
 	brandMemoryService := brandmemory.NewService(brandmemory.NewRepository(pool))
 	trendService := trends.NewService(trends.NewRepository(pool))
 	contentService := content.NewService(content.NewRepository(pool), brandMemoryService, trendService, experimentService)
-	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService, xClient, xAccountService)
+	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityService := community.NewService(community.NewRepository(pool), brandMemoryService, xClient, xAccountService)
-	automationService := automation.NewService(automation.NewRepository(pool), contentService, publishingService, communityService)
+	automationService := automation.NewService(automation.NewRepository(pool), contentService, publishingService, communityService, automation.Settings{
+		Interval: cfg.AutomationInterval(),
+		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
+	})
 
 	log.Printf("scheduler started with interval %s", interval)
 	runOnce(ctx, automationService)
@@ -71,7 +85,8 @@ func runOnce(ctx context.Context, automationService *automation.Service) {
 	}
 
 	log.Printf(
-		"automation run completed: drafts=%d schedules=%d replies=%d",
+		"automation run completed: published=%d drafts=%d schedules=%d replies=%d",
+		run.PostsPublished,
 		run.DraftsGenerated,
 		run.SchedulesCreated,
 		run.RepliesDrafted,

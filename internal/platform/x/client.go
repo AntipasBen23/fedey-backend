@@ -95,6 +95,37 @@ func (c *Client) ExchangeCode(ctx context.Context, clientID, redirectURI, code, 
 	return tokenResponse, nil
 }
 
+func (c *Client) RefreshToken(ctx context.Context, clientID, refreshToken string) (TokenResponse, error) {
+	values := url.Values{}
+	values.Set("grant_type", "refresh_token")
+	values.Set("refresh_token", strings.TrimSpace(refreshToken))
+	values.Set("client_id", strings.TrimSpace(clientID))
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/2/oauth2/token", strings.NewReader(values.Encode()))
+	if err != nil {
+		return TokenResponse{}, fmt.Errorf("build x refresh request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return TokenResponse{}, fmt.Errorf("perform x refresh request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return TokenResponse{}, fmt.Errorf("x token refresh failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&tokenResponse); err != nil {
+		return TokenResponse{}, fmt.Errorf("decode x refresh response: %w", err)
+	}
+
+	return tokenResponse, nil
+}
+
 func (c *Client) GetAuthenticatedUser(ctx context.Context, accessToken string) (User, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/2/users/me?user.fields=username", nil)
 	if err != nil {

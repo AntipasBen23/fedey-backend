@@ -87,6 +87,46 @@ func (r *PostgresRepository) GetByID(ctx context.Context, scheduleID string) (Sc
 	return item, nil
 }
 
+func (r *PostgresRepository) ListDue(ctx context.Context, before time.Time) ([]Schedule, error) {
+	const query = `
+		SELECT id, draft_id, COALESCE(variant_label, ''), channel, COALESCE(platform_post_id, ''), scheduled_for, status, COALESCE(published_at, TIMESTAMPTZ '0001-01-01'), created_at
+		FROM publishing_schedules
+		WHERE status = $1 AND scheduled_for <= $2
+		ORDER BY scheduled_for ASC
+	`
+
+	rows, err := r.pool.Query(ctx, query, StatusScheduled, before.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("list due publishing schedules: %w", err)
+	}
+	defer rows.Close()
+
+	var items []Schedule
+	for rows.Next() {
+		var item Schedule
+		if err := rows.Scan(
+			&item.ID,
+			&item.DraftID,
+			&item.VariantLabel,
+			&item.Channel,
+			&item.PlatformPostID,
+			&item.ScheduledFor,
+			&item.Status,
+			&item.PublishedAt,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan due publishing schedule: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate due publishing schedules: %w", err)
+	}
+
+	return items, nil
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (Schedule, error) {
 	const query = `
 		INSERT INTO publishing_schedules (id, draft_id, variant_label, channel, scheduled_for, status, created_at)
