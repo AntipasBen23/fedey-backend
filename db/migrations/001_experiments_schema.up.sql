@@ -70,6 +70,19 @@ CREATE TABLE IF NOT EXISTS community_inbox (
 
 CREATE INDEX IF NOT EXISTS idx_community_inbox_created_at ON community_inbox(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS automation_runs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    drafts_generated INTEGER NOT NULL,
+    schedules_created INTEGER NOT NULL,
+    replies_drafted INTEGER NOT NULL,
+    triggered_by TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_runs_created_at ON automation_runs(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

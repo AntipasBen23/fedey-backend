@@ -1,0 +1,68 @@
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/AntipasBen23/fedey-backend/internal/automation"
+	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/common/config"
+	"github.com/AntipasBen23/fedey-backend/internal/community"
+	"github.com/AntipasBen23/fedey-backend/internal/content"
+	"github.com/AntipasBen23/fedey-backend/internal/experiments"
+	"github.com/AntipasBen23/fedey-backend/internal/publishing"
+	postgresstorage "github.com/AntipasBen23/fedey-backend/internal/storage/postgres"
+	"github.com/AntipasBen23/fedey-backend/internal/trends"
+)
+
+func main() {
+	cfg := config.Load()
+	ctx := context.Background()
+
+	interval, err := time.ParseDuration(cfg.AutomationInterval())
+	if err != nil {
+		log.Fatalf("invalid FEDEY_AUTOMATION_INTERVAL: %v", err)
+	}
+
+	pool, err := postgresstorage.OpenPool(ctx, cfg.DatabaseURL())
+	if err != nil {
+		log.Fatalf("failed to initialize database pool: %v", err)
+	}
+	if pool != nil {
+		defer pool.Close()
+	}
+
+	experimentService := experiments.NewService(experiments.NewRepository(pool))
+	brandMemoryService := brandmemory.NewService(brandmemory.NewRepository(pool))
+	trendService := trends.NewService(trends.NewRepository(pool))
+	contentService := content.NewService(content.NewRepository(pool), brandMemoryService, trendService, experimentService)
+	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService)
+	communityService := community.NewService(community.NewRepository(pool), brandMemoryService)
+	automationService := automation.NewService(automation.NewRepository(pool), contentService, publishingService, communityService)
+
+	log.Printf("scheduler started with interval %s", interval)
+	runOnce(ctx, automationService)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		runOnce(ctx, automationService)
+	}
+}
+
+func runOnce(ctx context.Context, automationService *automation.Service) {
+	run, err := automationService.Run(ctx, "scheduler")
+	if err != nil {
+		log.Printf("automation run failed: %v", err)
+		return
+	}
+
+	log.Printf(
+		"automation run completed: drafts=%d schedules=%d replies=%d",
+		run.DraftsGenerated,
+		run.SchedulesCreated,
+		run.RepliesDrafted,
+	)
+}

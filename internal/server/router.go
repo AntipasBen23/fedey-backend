@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"github.com/AntipasBen23/fedey-backend/internal/automation"
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
@@ -19,6 +20,7 @@ type Dependencies struct {
 	ContentService     *content.Service
 	PublishingService  *publishing.Service
 	CommunityService   *community.Service
+	AutomationService  *automation.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -36,6 +38,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	contentHandler := handlers.NewContentHandler(deps.ContentService)
 	publishingHandler := handlers.NewPublishingHandler(deps.PublishingService)
 	communityHandler := handlers.NewCommunityHandler(deps.CommunityService)
+	automationHandler := handlers.NewAutomationHandler(deps.AutomationService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
@@ -54,6 +57,8 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /v1/community/inbox", communityHandler.CreateInboxItem)
 	mux.HandleFunc("POST /v1/community/inbox/{id}/draft-reply", communityHandler.DraftReply)
 	mux.HandleFunc("PATCH /v1/community/inbox/{id}/reply", communityHandler.MarkReplied)
+	mux.HandleFunc("GET /v1/automation/runs", automationHandler.ListRuns)
+	mux.HandleFunc("POST /v1/automation/run", automationHandler.RunOnce)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)

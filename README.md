@@ -34,6 +34,12 @@ Strategy-first AI social growth engine backend in Go.
 go run ./cmd/api
 ```
 
+Automation worker:
+
+```bash
+go run ./cmd/scheduler
+```
+
 Health endpoints:
 - `GET /healthz`
 - `GET /v1/health`
@@ -73,5 +79,10 @@ Community endpoints:
 - `POST /v1/community/inbox/{id}/draft-reply`
 - `PATCH /v1/community/inbox/{id}/reply`
 
+Automation endpoints:
+- `GET /v1/automation/runs`
+- `POST /v1/automation/run`
+
 Copy `.env.example` to `.env` and adjust if needed.
 If `FEDEY_DATABASE_URL` is unset, experiments use in-memory storage.
+Set `FEDEY_AUTOMATION_INTERVAL` to control scheduler cadence. Default: `1h`.

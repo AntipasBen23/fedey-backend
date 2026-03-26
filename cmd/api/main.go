@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AntipasBen23/fedey-backend/internal/automation"
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/common/config"
 	"github.com/AntipasBen23/fedey-backend/internal/community"
@@ -45,6 +46,8 @@ func main() {
 	publishingService := publishing.NewService(publishingRepository, contentService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService)
+	automationRepository := automation.NewRepository(pool)
+	automationService := automation.NewService(automationRepository, contentService, publishingService, communityService)
 
 	httpServer := &http.Server{
 		Addr: cfg.APIAddress(),
@@ -55,6 +58,7 @@ func main() {
 			ContentService:     contentService,
 			PublishingService:  publishingService,
 			CommunityService:   communityService,
+			AutomationService:  automationService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,
