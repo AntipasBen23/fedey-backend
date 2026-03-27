@@ -174,7 +174,7 @@ func (s *Service) UpdateReviewMode(ctx context.Context, input UpdateReviewModeIn
 	session.ReviewMode = normalizeReviewMode(input.ReviewMode)
 	if session.ReviewMode == "auto" {
 		if session.Activation.Status == "generated" && !hasScheduledActivationDraft(session.Activation.Drafts) {
-			session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+			session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session, session.Activation.Drafts)
 			if err != nil {
 				return Session{}, err
 			}
@@ -319,7 +319,7 @@ func (s *Service) Activate(ctx context.Context, sessionID string) (Session, erro
 		session.ApprovalStatus = "pending"
 		session.Status = StatusAwaitingApproval
 	} else {
-		session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+		session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session, session.Activation.Drafts)
 		if err != nil {
 			return Session{}, err
 		}
@@ -344,7 +344,7 @@ func (s *Service) ApproveActivation(ctx context.Context, sessionID string) (Sess
 		return Session{}, ErrInvalidSessionInput
 	}
 
-	scheduledDrafts, err := s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+	scheduledDrafts, err := s.scheduleActivationDrafts(ctx, session, session.Activation.Drafts)
 	if err != nil {
 		return Session{}, err
 	}
@@ -941,7 +941,7 @@ func (s *Service) syncActivationDrafts(ctx context.Context, session Session, pla
 	return summaries, nil
 }
 
-func (s *Service) scheduleActivationDrafts(ctx context.Context, drafts []ActivationDraft) ([]ActivationDraft, error) {
+func (s *Service) scheduleActivationDrafts(ctx context.Context, session Session, drafts []ActivationDraft) ([]ActivationDraft, error) {
 	if s.publishingService == nil || len(drafts) == 0 {
 		return drafts, nil
 	}
@@ -954,13 +954,14 @@ func (s *Service) scheduleActivationDrafts(ctx context.Context, drafts []Activat
 		}
 		recommendedAt := scheduledTimes[index]
 		if s.publishingService != nil {
-			recommendedAt = s.publishingService.RecommendNextTime(ctx, items[index].Channel, recommendedAt.Add(-1*time.Minute))
+			recommendedAt = s.publishingService.RecommendNextTime(ctx, items[index].Channel, recommendedAt.Add(-1*time.Minute), session.AccountMode)
 		}
 
 		schedule, err := s.publishingService.Create(ctx, publishing.CreateInput{
 			DraftID:      items[index].DraftID,
 			VariantLabel: "",
 			Channel:      items[index].Channel,
+			QueueProfile: session.AccountMode,
 			ScheduledFor: recommendedAt,
 		})
 		if err != nil {

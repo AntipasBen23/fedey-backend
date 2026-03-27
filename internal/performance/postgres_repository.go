@@ -96,3 +96,48 @@ func (r *PostgresRepository) ListRecent(ctx context.Context, platform string, li
 	}
 	return items, nil
 }
+
+func (r *PostgresRepository) ListForPost(ctx context.Context, platform, externalPostID string, limit int) ([]Snapshot, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	const query = `
+		SELECT id, platform, external_post_id, author_ref, content_preview, like_count, reply_count, quote_count, comment_count, published_at, captured_at
+		FROM platform_performance_snapshots
+		WHERE platform = $1 AND external_post_id = $2
+		ORDER BY captured_at ASC
+		LIMIT $3
+	`
+
+	rows, err := r.pool.Query(ctx, query, platform, externalPostID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list platform performance timeline: %w", err)
+	}
+	defer rows.Close()
+
+	var items []Snapshot
+	for rows.Next() {
+		var item Snapshot
+		if err := rows.Scan(
+			&item.ID,
+			&item.Platform,
+			&item.ExternalPostID,
+			&item.AuthorRef,
+			&item.ContentPreview,
+			&item.LikeCount,
+			&item.ReplyCount,
+			&item.QuoteCount,
+			&item.CommentCount,
+			&item.PublishedAt,
+			&item.CapturedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan platform performance timeline: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate platform performance timeline: %w", err)
+	}
+	return items, nil
+}

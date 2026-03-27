@@ -128,7 +128,7 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 			variantLabel = unscheduledDraft.Variants[1].Label
 		}
 
-		scheduledFor := s.publishingService.RecommendNextTime(ctx, unscheduledDraft.Channel, now)
+		scheduledFor := s.publishingService.RecommendNextTime(ctx, unscheduledDraft.Channel, now, "standard")
 		if nextWindow, ok := nextWindowAfter(now, s.settings.Windows); ok && nextWindow.After(now) && scheduledFor.Before(now.Add(5*time.Minute)) {
 			scheduledFor = nextWindow
 		}

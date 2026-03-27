@@ -48,3 +48,27 @@ func (r *MemoryRepository) ListRecent(_ context.Context, platform string, limit 
 	}
 	return items, nil
 }
+
+func (r *MemoryRepository) ListForPost(_ context.Context, platform, externalPostID string, limit int) ([]Snapshot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]Snapshot, 0, len(r.snapshots))
+	for _, item := range r.snapshots {
+		if platform != "" && !strings.EqualFold(item.Platform, platform) {
+			continue
+		}
+		if !strings.EqualFold(item.ExternalPostID, externalPostID) {
+			continue
+		}
+		items = append(items, item)
+	}
+
+	slices.SortFunc(items, func(left, right Snapshot) int {
+		return left.CapturedAt.Compare(right.CapturedAt)
+	})
+	if limit > 0 && len(items) > limit {
+		items = items[len(items)-limit:]
+	}
+	return items, nil
+}

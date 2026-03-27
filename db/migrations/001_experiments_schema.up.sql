@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS publishing_schedules (
     draft_id TEXT NOT NULL REFERENCES content_drafts(id) ON DELETE CASCADE,
     variant_label TEXT NULL,
     channel TEXT NOT NULL,
+    queue_profile TEXT NOT NULL DEFAULT 'standard',
     platform_post_id TEXT NULL,
     scheduled_for TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL,
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS publishing_schedules (
 
 CREATE INDEX IF NOT EXISTS idx_publishing_schedules_scheduled_for ON publishing_schedules(scheduled_for ASC);
 ALTER TABLE publishing_schedules ADD COLUMN IF NOT EXISTS performance_synced_at TIMESTAMPTZ NULL;
+ALTER TABLE publishing_schedules ADD COLUMN IF NOT EXISTS queue_profile TEXT NOT NULL DEFAULT 'standard';
 
 CREATE TABLE IF NOT EXISTS community_inbox (
     id TEXT PRIMARY KEY,

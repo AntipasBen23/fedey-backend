@@ -41,7 +41,24 @@ func NewService(repository Repository, contentService *content.Service, experime
 }
 
 func (s *Service) List(ctx context.Context) ([]Schedule, error) {
-	return s.repository.List(ctx)
+	items, err := s.repository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.performanceService == nil {
+		return items, nil
+	}
+	for index := range items {
+		if items[index].Status != StatusPublished || strings.TrimSpace(items[index].PlatformPostID) == "" {
+			continue
+		}
+		timeline, err := s.performanceTimeline(ctx, items[index].Channel, items[index].PlatformPostID)
+		if err != nil {
+			continue
+		}
+		items[index].Timeline = timeline
+	}
+	return items, nil
 }
 
 func (s *Service) Create(ctx context.Context, input CreateInput) (Schedule, error) {
@@ -66,11 +83,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Schedule, erro
 		DraftID:      draft.ID,
 		VariantLabel: strings.ToUpper(strings.TrimSpace(input.VariantLabel)),
 		Channel:      strings.TrimSpace(input.Channel),
+		QueueProfile: normalizeQueueProfile(input.QueueProfile),
 		ScheduledFor: input.ScheduledFor,
 	})
 }
 
-func (s *Service) RecommendNextTime(ctx context.Context, channel string, after time.Time) time.Time {
+func (s *Service) RecommendNextTime(ctx context.Context, channel string, after time.Time, queueProfile string) time.Time {
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if after.IsZero() {
 		after = time.Now().UTC()
@@ -84,7 +102,7 @@ func (s *Service) RecommendNextTime(ctx context.Context, channel string, after t
 		}
 	}
 	schedules, _ := s.repository.List(ctx)
-	return applyQueuePolicies(nextOptimalTime(after, bestHours), channel, schedules)
+	return applyQueuePolicies(nextOptimalTime(after, bestHours), channel, normalizeQueueProfile(queueProfile), schedules)
 }
 
 func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedule, error) {
@@ -215,7 +233,49 @@ func (s *Service) SyncPublishedPerformance(ctx context.Context) (int, error) {
 		}
 	}
 
+	_, _ = s.AutoRescheduleUnderperforming(ctx)
 	return recorded, nil
+}
+
+func (s *Service) AutoRescheduleUnderperforming(ctx context.Context) (int, error) {
+	if s.performanceService == nil {
+		return 0, nil
+	}
+	schedules, err := s.repository.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	rescheduled := 0
+	underperforming := map[string]map[int]struct{}{}
+	for _, channel := range []string{"x", "linkedin"} {
+		hours, err := s.underperformingHours(ctx, channel)
+		if err != nil || len(hours) == 0 {
+			continue
+		}
+		underperforming[channel] = hours
+	}
+
+	for _, schedule := range schedules {
+		if schedule.Status != StatusScheduled {
+			continue
+		}
+		hours := underperforming[strings.ToLower(schedule.Channel)]
+		if len(hours) == 0 {
+			continue
+		}
+		if _, bad := hours[schedule.ScheduledFor.UTC().Hour()]; !bad {
+			continue
+		}
+		next := s.RecommendNextTime(ctx, schedule.Channel, schedule.ScheduledFor.Add(3*time.Hour), schedule.QueueProfile)
+		if next.Equal(schedule.ScheduledFor) {
+			continue
+		}
+		if _, err := s.repository.UpdateScheduledFor(ctx, schedule.ID, next); err == nil {
+			rescheduled++
+		}
+	}
+	return rescheduled, nil
 }
 
 func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {
@@ -259,6 +319,25 @@ func buildPublishText(draft content.Draft, variantLabel string) string {
 	return draft.Hook + "\n\n" + draft.Body
 }
 
+func (s *Service) performanceTimeline(ctx context.Context, channel, platformPostID string) ([]PerformancePoint, error) {
+	snapshots, err := s.performanceService.Timeline(ctx, strings.ToLower(strings.TrimSpace(channel)), strings.TrimSpace(platformPostID), 20)
+	if err != nil {
+		return nil, err
+	}
+	points := make([]PerformancePoint, 0, len(snapshots))
+	for _, item := range snapshots {
+		points = append(points, PerformancePoint{
+			CapturedAt:      item.CapturedAt,
+			Likes:           item.LikeCount,
+			Replies:         item.ReplyCount,
+			Quotes:          item.QuoteCount,
+			Comments:        item.CommentCount,
+			TotalEngagement: item.LikeCount + item.ReplyCount + item.QuoteCount + item.CommentCount,
+		})
+	}
+	return points, nil
+}
+
 func fallbackHoursFromWindows(windows []Window) []int {
 	if len(windows) == 0 {
 		return []int{9, 12, 15}
@@ -290,7 +369,7 @@ func nextOptimalTime(after time.Time, hours []int) time.Time {
 	return current.Add(24 * time.Hour)
 }
 
-func applyQueuePolicies(candidate time.Time, channel string, schedules []Schedule) time.Time {
+func applyQueuePolicies(candidate time.Time, channel string, queueProfile string, schedules []Schedule) time.Time {
 	current := candidate.UTC()
 	for {
 		conflict := false
@@ -301,13 +380,13 @@ func applyQueuePolicies(candidate time.Time, channel string, schedules []Schedul
 			if item.ScheduledFor.IsZero() {
 				continue
 			}
-			if withinGap(current, item.ScheduledFor.UTC(), sameChannelGap(channel, item.Channel)) {
-				current = item.ScheduledFor.UTC().Add(sameChannelGap(channel, item.Channel))
+			if withinGap(current, item.ScheduledFor.UTC(), sameChannelGap(channel, item.Channel, queueProfile, item.QueueProfile)) {
+				current = item.ScheduledFor.UTC().Add(sameChannelGap(channel, item.Channel, queueProfile, item.QueueProfile))
 				conflict = true
 				break
 			}
-			if withinGap(current, item.ScheduledFor.UTC(), crossChannelGap(channel, item.Channel)) {
-				current = item.ScheduledFor.UTC().Add(crossChannelGap(channel, item.Channel))
+			if withinGap(current, item.ScheduledFor.UTC(), crossChannelGap(channel, item.Channel, queueProfile, item.QueueProfile)) {
+				current = item.ScheduledFor.UTC().Add(crossChannelGap(channel, item.Channel, queueProfile, item.QueueProfile))
 				conflict = true
 				break
 			}
@@ -318,21 +397,31 @@ func applyQueuePolicies(candidate time.Time, channel string, schedules []Schedul
 	}
 }
 
-func sameChannelGap(left, right string) time.Duration {
+func sameChannelGap(left, right, leftProfile, rightProfile string) time.Duration {
 	if !strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right)) {
 		return 0
 	}
+	profile := dominantQueueProfile(leftProfile, rightProfile)
 	switch strings.ToLower(strings.TrimSpace(left)) {
 	case "linkedin":
+		if profile == "new" {
+			return 24 * time.Hour
+		}
 		return 18 * time.Hour
 	default:
+		if profile == "new" {
+			return 12 * time.Hour
+		}
 		return 6 * time.Hour
 	}
 }
 
-func crossChannelGap(left, right string) time.Duration {
+func crossChannelGap(left, right, leftProfile, rightProfile string) time.Duration {
 	if strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right)) {
 		return 0
+	}
+	if dominantQueueProfile(leftProfile, rightProfile) == "new" {
+		return 4 * time.Hour
 	}
 	return 2 * time.Hour
 }
@@ -346,4 +435,63 @@ func withinGap(left, right time.Time, gap time.Duration) bool {
 		diff = -diff
 	}
 	return diff < gap
+}
+
+func normalizeQueueProfile(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "new":
+		return "new"
+	case "existing":
+		return "existing"
+	default:
+		return "standard"
+	}
+}
+
+func dominantQueueProfile(left, right string) string {
+	if normalizeQueueProfile(left) == "new" || normalizeQueueProfile(right) == "new" {
+		return "new"
+	}
+	if normalizeQueueProfile(left) == "existing" || normalizeQueueProfile(right) == "existing" {
+		return "existing"
+	}
+	return "standard"
+}
+
+func (s *Service) underperformingHours(ctx context.Context, channel string) (map[int]struct{}, error) {
+	snapshots, err := s.performanceService.Recent(ctx, strings.ToLower(strings.TrimSpace(channel)), 96)
+	if err != nil {
+		return nil, err
+	}
+	if len(snapshots) == 0 {
+		return nil, nil
+	}
+	type bucket struct {
+		total int
+		count int
+	}
+	buckets := make(map[int]bucket)
+	bestAverage := 0.0
+	for _, item := range snapshots {
+		hour := item.PublishedAt.UTC().Hour()
+		current := buckets[hour]
+		current.total += item.LikeCount + item.ReplyCount + item.QuoteCount + item.CommentCount
+		current.count++
+		buckets[hour] = current
+		avg := float64(current.total) / float64(current.count)
+		if avg > bestAverage {
+			bestAverage = avg
+		}
+	}
+	if bestAverage == 0 {
+		return nil, nil
+	}
+	result := make(map[int]struct{})
+	for hour, item := range buckets {
+		avg := float64(item.total) / float64(item.count)
+		if avg <= bestAverage*0.55 {
+			result[hour] = struct{}{}
+		}
+	}
+	return result, nil
 }

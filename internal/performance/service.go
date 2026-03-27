@@ -404,6 +404,14 @@ func (s *Service) BestHours(ctx context.Context, platform string, fallbackHours 
 	return result, nil
 }
 
+func (s *Service) Timeline(ctx context.Context, platform, externalPostID string, limit int) ([]Snapshot, error) {
+	return s.repository.ListForPost(ctx, strings.ToLower(strings.TrimSpace(platform)), strings.TrimSpace(externalPostID), limit)
+}
+
+func (s *Service) Recent(ctx context.Context, platform string, limit int) ([]Snapshot, error) {
+	return s.repository.ListRecent(ctx, strings.ToLower(strings.TrimSpace(platform)), limit)
+}
+
 func engagementScore(snapshot Snapshot) int {
 	return snapshot.LikeCount + snapshot.ReplyCount + snapshot.QuoteCount
 }

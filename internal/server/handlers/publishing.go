@@ -32,6 +32,7 @@ type createScheduleRequest struct {
 	DraftID      string `json:"draftId"`
 	VariantLabel string `json:"variantLabel"`
 	Channel      string `json:"channel"`
+	QueueProfile string `json:"queueProfile"`
 	ScheduledFor string `json:"scheduledFor"`
 }
 
@@ -52,6 +53,7 @@ func (h *PublishingHandler) CreateSchedule(w http.ResponseWriter, r *http.Reques
 		DraftID:      request.DraftID,
 		VariantLabel: request.VariantLabel,
 		Channel:      request.Channel,
+		QueueProfile: request.QueueProfile,
 		ScheduledFor: scheduledFor,
 	})
 	if errors.Is(err, publishing.ErrInvalidScheduleInput) {

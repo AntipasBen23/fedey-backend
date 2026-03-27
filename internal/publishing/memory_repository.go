@@ -39,6 +39,7 @@ func (r *MemoryRepository) Create(_ context.Context, input CreateInput) (Schedul
 		DraftID:      input.DraftID,
 		VariantLabel: input.VariantLabel,
 		Channel:      input.Channel,
+		QueueProfile: input.QueueProfile,
 		ScheduledFor: input.ScheduledFor.UTC(),
 		Status:       StatusScheduled,
 		CreatedAt:    now,
@@ -106,6 +107,20 @@ func (r *MemoryRepository) MarkPerformanceSynced(_ context.Context, scheduleID s
 			continue
 		}
 		r.schedules[index].PerformanceSyncedAt = syncedAt.UTC()
+		return r.schedules[index], nil
+	}
+	return Schedule{}, ErrScheduleNotFound
+}
+
+func (r *MemoryRepository) UpdateScheduledFor(_ context.Context, scheduleID string, scheduledFor time.Time) (Schedule, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for index := range r.schedules {
+		if r.schedules[index].ID != scheduleID {
+			continue
+		}
+		r.schedules[index].ScheduledFor = scheduledFor.UTC()
 		return r.schedules[index], nil
 	}
 	return Schedule{}, ErrScheduleNotFound
