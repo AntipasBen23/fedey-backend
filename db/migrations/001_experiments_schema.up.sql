@@ -51,10 +51,12 @@ CREATE TABLE IF NOT EXISTS publishing_schedules (
     scheduled_for TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL,
     published_at TIMESTAMPTZ NULL,
+    performance_synced_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_publishing_schedules_scheduled_for ON publishing_schedules(scheduled_for ASC);
+ALTER TABLE publishing_schedules ADD COLUMN IF NOT EXISTS performance_synced_at TIMESTAMPTZ NULL;
 
 CREATE TABLE IF NOT EXISTS community_inbox (
     id TEXT PRIMARY KEY,

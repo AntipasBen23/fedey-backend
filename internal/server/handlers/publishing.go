@@ -87,3 +87,16 @@ func (h *PublishingHandler) MarkPublished(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (h *PublishingHandler) SyncPerformance(w http.ResponseWriter, r *http.Request) {
+	count, err := h.service.SyncPublishedPerformance(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to sync publishing performance")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          "synced",
+		"metricsRecorded": count,
+	})
+}

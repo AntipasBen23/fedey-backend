@@ -11,4 +11,5 @@ type Repository interface {
 	Create(ctx context.Context, input CreateInput) (Schedule, error)
 	GetByID(ctx context.Context, scheduleID string) (Schedule, error)
 	MarkPublished(ctx context.Context, scheduleID string, platformPostID string) (Schedule, error)
+	MarkPerformanceSynced(ctx context.Context, scheduleID string, syncedAt time.Time) (Schedule, error)
 }

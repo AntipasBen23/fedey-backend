@@ -23,6 +23,13 @@ type Service struct {
 	linkedinService *linkedinaccounts.Service
 }
 
+type Delta struct {
+	Likes    int
+	Replies  int
+	Quotes   int
+	Comments int
+}
+
 func NewService(
 	repository Repository,
 	xClient *xplatform.Client,
@@ -74,6 +81,34 @@ func (s *Service) Insights(ctx context.Context, platform string) ([]string, erro
 	}
 }
 
+func (s *Service) CapturePublishedPost(ctx context.Context, platform, externalPostID string) (Snapshot, Delta, error) {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	externalPostID = strings.TrimSpace(externalPostID)
+	if platform == "" || externalPostID == "" {
+		return Snapshot{}, Delta{}, fmt.Errorf("invalid performance capture input")
+	}
+
+	previous, _ := s.latestSnapshotForPost(ctx, platform, externalPostID)
+
+	var snapshot Snapshot
+	var err error
+	switch platform {
+	case "linkedin":
+		snapshot, err = s.captureLinkedInPost(ctx, externalPostID)
+	default:
+		snapshot, err = s.captureXPost(ctx, externalPostID)
+	}
+	if err != nil {
+		return Snapshot{}, Delta{}, err
+	}
+
+	if err := s.repository.SaveBatch(ctx, []Snapshot{snapshot}); err != nil {
+		return Snapshot{}, Delta{}, err
+	}
+
+	return snapshot, deltaFromSnapshots(previous, snapshot), nil
+}
+
 func (s *Service) syncX(ctx context.Context) (int, error) {
 	if s.xClient == nil || s.xAccountService == nil {
 		return 0, fmt.Errorf("x performance sync unavailable")
@@ -110,6 +145,41 @@ func (s *Service) syncX(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return len(snapshots), nil
+}
+
+func (s *Service) captureXPost(ctx context.Context, postID string) (Snapshot, error) {
+	if s.xClient == nil || s.xAccountService == nil {
+		return Snapshot{}, fmt.Errorf("x performance sync unavailable")
+	}
+
+	account, err := s.xAccountService.GetActive(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	posts, err := s.xClient.FetchUserPostsWithToken(ctx, account.AccessToken, account.UserID, 40)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	for _, post := range posts {
+		if post.ID != strings.TrimSpace(postID) {
+			continue
+		}
+		now := time.Now().UTC()
+		return Snapshot{
+			ID:             "perf-" + uuid.NewString(),
+			Platform:       "x",
+			ExternalPostID: post.ID,
+			AuthorRef:      account.Username,
+			ContentPreview: preview(post.Text),
+			LikeCount:      post.LikeCount,
+			ReplyCount:     post.ReplyCount,
+			QuoteCount:     post.QuoteCount,
+			PublishedAt:    post.CreatedAt,
+			CapturedAt:     chooseCapturedAt(post.CreatedAt, now),
+		}, nil
+	}
+	return Snapshot{}, fmt.Errorf("x post not found in recent history")
 }
 
 func (s *Service) syncLinkedIn(ctx context.Context) (int, error) {
@@ -159,6 +229,50 @@ func (s *Service) syncLinkedIn(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return len(snapshots), nil
+}
+
+func (s *Service) captureLinkedInPost(ctx context.Context, postID string) (Snapshot, error) {
+	if s.linkedinClient == nil || s.linkedinService == nil {
+		return Snapshot{}, fmt.Errorf("linkedin performance sync unavailable")
+	}
+
+	account, err := s.linkedinService.GetActive(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	posts, err := s.linkedinClient.ListAuthorPosts(ctx, account.AccessToken, account.AuthorURN, 25)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	needle := normalizeLinkedInPostURN(postID)
+	now := time.Now().UTC()
+	for _, post := range posts {
+		if normalizeLinkedInPostURN(post.ID) != needle {
+			continue
+		}
+		comments, err := s.linkedinClient.ListComments(ctx, account.AccessToken, needle, 25)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		authoredReplies := 0
+		for _, comment := range comments {
+			if strings.EqualFold(comment.ActorURN, account.AuthorURN) {
+				authoredReplies++
+			}
+		}
+		return Snapshot{
+			ID:             "perf-" + uuid.NewString(),
+			Platform:       "linkedin",
+			ExternalPostID: needle,
+			AuthorRef:      account.DisplayName,
+			ContentPreview: preview(post.Commentary),
+			ReplyCount:     authoredReplies,
+			CommentCount:   len(comments),
+			PublishedAt:    post.CreatedAt,
+			CapturedAt:     chooseCapturedAt(post.CreatedAt, now),
+		}, nil
+	}
+	return Snapshot{}, fmt.Errorf("linkedin post not found in recent history")
 }
 
 func latestPerPost(snapshots []Snapshot) []Snapshot {
@@ -292,6 +406,28 @@ func (s *Service) BestHours(ctx context.Context, platform string, fallbackHours 
 
 func engagementScore(snapshot Snapshot) int {
 	return snapshot.LikeCount + snapshot.ReplyCount + snapshot.QuoteCount
+}
+
+func deltaFromSnapshots(previous Snapshot, current Snapshot) Delta {
+	return Delta{
+		Likes:    max(0, current.LikeCount-previous.LikeCount),
+		Replies:  max(0, current.ReplyCount-previous.ReplyCount),
+		Quotes:   max(0, current.QuoteCount-previous.QuoteCount),
+		Comments: max(0, current.CommentCount-previous.CommentCount),
+	}
+}
+
+func (s *Service) latestSnapshotForPost(ctx context.Context, platform, externalPostID string) (Snapshot, error) {
+	items, err := s.repository.ListRecent(ctx, platform, 120)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for _, item := range items {
+		if strings.EqualFold(item.ExternalPostID, externalPostID) {
+			return item, nil
+		}
+	}
+	return Snapshot{}, fmt.Errorf("snapshot not found")
 }
 
 func normalizeLinkedInPostURN(value string) string {

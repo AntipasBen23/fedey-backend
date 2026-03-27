@@ -71,6 +71,14 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 	run.PostsPublished = len(publishedSchedules)
 
+	performanceMetricsRecorded := 0
+	if s.publishingService != nil {
+		count, err := s.publishingService.SyncPublishedPerformance(ctx)
+		if err == nil {
+			performanceMetricsRecorded = count
+		}
+	}
+
 	if s.trendService != nil && s.brandMemoryService != nil {
 		profile, err := s.brandMemoryService.Get(ctx)
 		if err == nil {
@@ -153,8 +161,9 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	run.Notes = fmt.Sprintf(
-		"Published %d posts, ingested %d live signals, synced %d performance snapshots, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
+		"Published %d posts, recorded %d live performance updates, ingested %d live signals, synced %d performance snapshots, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
 		run.PostsPublished,
+		performanceMetricsRecorded,
 		run.SignalsIngested,
 		performanceSnapshots,
 		run.DraftsGenerated,

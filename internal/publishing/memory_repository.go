@@ -96,3 +96,17 @@ func (r *MemoryRepository) MarkPublished(_ context.Context, scheduleID string, p
 
 	return Schedule{}, ErrScheduleNotFound
 }
+
+func (r *MemoryRepository) MarkPerformanceSynced(_ context.Context, scheduleID string, syncedAt time.Time) (Schedule, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for index := range r.schedules {
+		if r.schedules[index].ID != scheduleID {
+			continue
+		}
+		r.schedules[index].PerformanceSyncedAt = syncedAt.UTC()
+		return r.schedules[index], nil
+	}
+	return Schedule{}, ErrScheduleNotFound
+}
