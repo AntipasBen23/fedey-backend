@@ -105,6 +105,14 @@ func (s *Service) GenerateVariants(ctx context.Context, draftID string) (Draft, 
 	return draft, nil
 }
 
+func (s *Service) SaveBatch(ctx context.Context, drafts []Draft) error {
+	if len(drafts) == 0 {
+		return nil
+	}
+
+	return s.repository.SaveBatch(ctx, drafts)
+}
+
 func buildDrafts(profile brandmemory.Profile, signals []trends.Signal) []Draft {
 	now := time.Now().UTC()
 	if len(signals) == 0 {

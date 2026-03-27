@@ -20,7 +20,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, status, created_at, updated_at
 		FROM onboarding_sessions
 		ORDER BY created_at DESC
 	`
@@ -48,8 +48,8 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 
 func (r *PostgresRepository) CreateSession(ctx context.Context, session Session) error {
 	const query = `
-		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 	`
 	auditPayload, err := json.Marshal(session.Audit)
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding activation: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, activationPayload, session.Status, session.CreatedAt, session.UpdatedAt)
+	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, auditPayload, activationPayload, session.Status, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create onboarding session: %w", err)
 	}
@@ -69,7 +69,7 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session) error {
 	const query = `
 		UPDATE onboarding_sessions
-		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, audit=$11, activation=$12, status=$13, updated_at=$14
+		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, review_mode=$11, approval_status=$12, audit=$13, activation=$14, status=$15, updated_at=$16
 		WHERE id=$1
 	`
 	auditPayload, err := json.Marshal(session.Audit)
@@ -80,7 +80,7 @@ func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding activation: %w", err)
 	}
-	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, activationPayload, session.Status, session.UpdatedAt)
+	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, auditPayload, activationPayload, session.Status, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("update onboarding session: %w", err)
 	}
@@ -92,7 +92,7 @@ func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session)
 
 func (r *PostgresRepository) GetSession(ctx context.Context, sessionID string) (Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, status, created_at, updated_at
 		FROM onboarding_sessions
 		WHERE id = $1
 	`
@@ -174,7 +174,7 @@ func scanSession(scanner sessionScanner) (Session, error) {
 	var session Session
 	var auditPayload []byte
 	var activationPayload []byte
-	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &auditPayload, &activationPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
+	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &session.ReviewMode, &session.ApprovalStatus, &auditPayload, &activationPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
 		return Session{}, err
 	}

@@ -76,7 +76,7 @@ func main() {
 	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
 		Interval: cfg.AutomationInterval(),

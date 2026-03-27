@@ -100,3 +100,44 @@ func (h *OnboardingHandler) Activate(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (h *OnboardingHandler) UpdateReviewMode(w http.ResponseWriter, r *http.Request) {
+	var request onboarding.UpdateReviewModeInput
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	request.SessionID = r.PathValue("id")
+
+	item, err := h.service.UpdateReviewMode(r.Context(), request)
+	if errors.Is(err, onboarding.ErrInvalidSessionInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrSessionNotFound) {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update review mode")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *OnboardingHandler) ApproveActivation(w http.ResponseWriter, r *http.Request) {
+	item, err := h.service.ApproveActivation(r.Context(), r.PathValue("id"))
+	if errors.Is(err, onboarding.ErrInvalidSessionInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrSessionNotFound) {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to approve activation")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}

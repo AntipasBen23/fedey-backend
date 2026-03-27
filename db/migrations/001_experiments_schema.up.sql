@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
     audience TEXT NOT NULL,
     voice_summary TEXT NOT NULL,
     constraints TEXT[] NOT NULL DEFAULT '{}',
+    review_mode TEXT NOT NULL DEFAULT 'auto',
+    approval_status TEXT NOT NULL DEFAULT 'not_required',
     audit JSONB NOT NULL DEFAULT '{}'::jsonb,
     activation JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL,
@@ -91,6 +93,8 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
 );
 
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS activation JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS review_mode TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'not_required';
 
 CREATE TABLE IF NOT EXISTS onboarding_questions (
     id TEXT PRIMARY KEY,

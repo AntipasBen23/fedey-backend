@@ -5,11 +5,12 @@ import "time"
 type SessionStatus string
 
 const (
-	StatusDraft      SessionStatus = "draft"
-	StatusInterview  SessionStatus = "interview"
-	StatusReady      SessionStatus = "ready"
-	StatusAuditReady SessionStatus = "audit_ready"
-	StatusActivated  SessionStatus = "activated"
+	StatusDraft            SessionStatus = "draft"
+	StatusInterview        SessionStatus = "interview"
+	StatusReady            SessionStatus = "ready"
+	StatusAuditReady       SessionStatus = "audit_ready"
+	StatusAwaitingApproval SessionStatus = "awaiting_approval"
+	StatusActivated        SessionStatus = "activated"
 )
 
 type Session struct {
@@ -23,6 +24,8 @@ type Session struct {
 	Audience        string         `json:"audience"`
 	VoiceSummary    string         `json:"voiceSummary"`
 	Constraints     []string       `json:"constraints"`
+	ReviewMode      string         `json:"reviewMode"`
+	ApprovalStatus  string         `json:"approvalStatus"`
 	Questions       []Question     `json:"questions"`
 	Audit           AuditReport    `json:"audit"`
 	Activation      ActivationPlan `json:"activation"`
@@ -53,11 +56,12 @@ type AuditReport struct {
 }
 
 type ActivationPlan struct {
-	Status          string           `json:"status"`
-	BrandMemorySync bool             `json:"brandMemorySync"`
-	WeekPlan        []ActivationItem `json:"weekPlan"`
-	Summary         string           `json:"summary"`
-	GeneratedAt     time.Time        `json:"generatedAt,omitempty"`
+	Status          string            `json:"status"`
+	BrandMemorySync bool              `json:"brandMemorySync"`
+	WeekPlan        []ActivationItem  `json:"weekPlan"`
+	Drafts          []ActivationDraft `json:"drafts"`
+	Summary         string            `json:"summary"`
+	GeneratedAt     time.Time         `json:"generatedAt,omitempty"`
 }
 
 type ActivationItem struct {
@@ -66,6 +70,13 @@ type ActivationItem struct {
 	Focus      string `json:"focus"`
 	Format     string `json:"format"`
 	Hypothesis string `json:"hypothesis"`
+}
+
+type ActivationDraft struct {
+	DraftID   string `json:"draftId"`
+	Channel   string `json:"channel"`
+	Hook      string `json:"hook"`
+	Rationale string `json:"rationale"`
 }
 
 type CreateSessionInput struct {
@@ -77,10 +88,16 @@ type CreateSessionInput struct {
 	BrandName       string   `json:"brandName"`
 	Audience        string   `json:"audience"`
 	Constraints     []string `json:"constraints"`
+	ReviewMode      string   `json:"reviewMode"`
 }
 
 type AnswerQuestionInput struct {
 	SessionID  string `json:"sessionId"`
 	QuestionID string `json:"questionId"`
 	Answer     string `json:"answer"`
+}
+
+type UpdateReviewModeInput struct {
+	SessionID  string `json:"sessionId"`
+	ReviewMode string `json:"reviewMode"`
 }

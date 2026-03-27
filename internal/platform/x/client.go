@@ -27,10 +27,13 @@ type Mention struct {
 }
 
 type UserPost struct {
-	ID        string
-	Text      string
-	ReplyToID string
-	CreatedAt time.Time
+	ID         string
+	Text       string
+	ReplyToID  string
+	LikeCount  int
+	ReplyCount int
+	QuoteCount int
+	CreatedAt  time.Time
 }
 
 type TokenResponse struct {
@@ -307,7 +310,7 @@ func (c *Client) FetchUserPostsWithToken(ctx context.Context, accessToken, userI
 
 	query := url.Values{}
 	query.Set("max_results", fmt.Sprintf("%d", maxResults))
-	query.Set("tweet.fields", "created_at,referenced_tweets")
+	query.Set("tweet.fields", "created_at,referenced_tweets,public_metrics")
 	endpoint := fmt.Sprintf("%s/2/users/%s/tweets?%s", c.baseURL, strings.TrimSpace(userID), query.Encode())
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -328,9 +331,14 @@ func (c *Client) FetchUserPostsWithToken(ctx context.Context, accessToken, userI
 
 	var result struct {
 		Data []struct {
-			ID               string `json:"id"`
-			Text             string `json:"text"`
-			CreatedAt        string `json:"created_at"`
+			ID            string `json:"id"`
+			Text          string `json:"text"`
+			CreatedAt     string `json:"created_at"`
+			PublicMetrics struct {
+				LikeCount  int `json:"like_count"`
+				ReplyCount int `json:"reply_count"`
+				QuoteCount int `json:"quote_count"`
+			} `json:"public_metrics"`
 			ReferencedTweets []struct {
 				ID   string `json:"id"`
 				Type string `json:"type"`
@@ -352,10 +360,13 @@ func (c *Client) FetchUserPostsWithToken(ctx context.Context, accessToken, userI
 		}
 		createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
 		posts = append(posts, UserPost{
-			ID:        item.ID,
-			Text:      item.Text,
-			ReplyToID: replyToID,
-			CreatedAt: createdAt,
+			ID:         item.ID,
+			Text:       item.Text,
+			ReplyToID:  replyToID,
+			LikeCount:  item.PublicMetrics.LikeCount,
+			ReplyCount: item.PublicMetrics.ReplyCount,
+			QuoteCount: item.PublicMetrics.QuoteCount,
+			CreatedAt:  createdAt,
 		})
 	}
 
