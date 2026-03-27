@@ -101,6 +101,7 @@ func (s *Service) syncX(ctx context.Context) (int, error) {
 			LikeCount:      post.LikeCount,
 			ReplyCount:     post.ReplyCount,
 			QuoteCount:     post.QuoteCount,
+			PublishedAt:    post.CreatedAt,
 			CapturedAt:     chooseCapturedAt(post.CreatedAt, now),
 		})
 	}
@@ -149,6 +150,7 @@ func (s *Service) syncLinkedIn(ctx context.Context) (int, error) {
 			ContentPreview: preview(post.Commentary),
 			ReplyCount:     authoredReplies,
 			CommentCount:   len(comments),
+			PublishedAt:    post.CreatedAt,
 			CapturedAt:     chooseCapturedAt(post.CreatedAt, now),
 		})
 	}
@@ -226,6 +228,66 @@ func buildLinkedInInsights(snapshots []Snapshot) []string {
 		fmt.Sprintf("Ongoing LinkedIn memory now tracks %d recent posts with an average of %d visible comments and %d authored replies.", len(snapshots), totalComments/count, totalReplies/count),
 		fmt.Sprintf("The strongest tracked LinkedIn post so far centers on: %s", preview(best.ContentPreview)),
 	}
+}
+
+func (s *Service) BestHours(ctx context.Context, platform string, fallbackHours []int) ([]int, error) {
+	snapshots, err := s.repository.ListRecent(ctx, strings.ToLower(strings.TrimSpace(platform)), 72)
+	if err != nil {
+		return nil, err
+	}
+	if len(snapshots) == 0 {
+		return fallbackHours, nil
+	}
+
+	type bucket struct {
+		score int
+		count int
+	}
+	buckets := make(map[int]bucket)
+	for _, item := range latestPerPost(snapshots) {
+		if item.PublishedAt.IsZero() {
+			continue
+		}
+		hour := item.PublishedAt.UTC().Hour()
+		current := buckets[hour]
+		current.score += engagementScore(item) + item.CommentCount
+		current.count++
+		buckets[hour] = current
+	}
+
+	if len(buckets) == 0 {
+		return fallbackHours, nil
+	}
+
+	type hourScore struct {
+		hour int
+		avg  float64
+	}
+	scores := make([]hourScore, 0, len(buckets))
+	for hour, item := range buckets {
+		scores = append(scores, hourScore{
+			hour: hour,
+			avg:  float64(item.score) / float64(max(1, item.count)),
+		})
+	}
+	slices.SortFunc(scores, func(left, right hourScore) int {
+		if left.avg == right.avg {
+			return left.hour - right.hour
+		}
+		if left.avg > right.avg {
+			return -1
+		}
+		return 1
+	})
+
+	result := make([]int, 0, len(scores))
+	for _, item := range scores {
+		result = append(result, item.hour)
+		if len(result) == 3 {
+			break
+		}
+	}
+	return result, nil
 }
 
 func engagementScore(snapshot Snapshot) int {

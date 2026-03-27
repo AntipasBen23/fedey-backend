@@ -87,6 +87,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		Activation: ActivationPlan{
 			Status: "not_started",
 		},
+		History: []HistoryEntry{
+			newHistoryEntry("system", "session_created", "Created onboarding session from hiring brief."),
+		},
 		Status:    StatusInterview,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -107,6 +110,10 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	session.Questions = questions
 	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	session.History = append(session.History, newHistoryEntry("system", "brand_memory_synced", "Synced initial brand memory from onboarding inputs."))
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
 	return s.repository.GetSession(ctx, session.ID)
@@ -135,11 +142,21 @@ func (s *Service) AnswerQuestion(ctx context.Context, input AnswerQuestionInput)
 	if allRequiredAnswered(session.Questions) && session.AccountMode == "new" {
 		session.Status = StatusReady
 	}
+	session.History = append(session.History, newHistoryEntry("hirer", "question_answered", "Saved onboarding answer for "+question.Category+"."))
 	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
 	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	session, err = s.repository.GetSession(ctx, session.ID)
+	if err != nil {
+		return Session{}, err
+	}
+	session.History = append(session.History, newHistoryEntry("system", "brand_memory_synced", "Updated brand memory from onboarding answers."))
+	session.UpdatedAt = time.Now().UTC()
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
 	return s.repository.GetSession(ctx, session.ID)
@@ -177,6 +194,7 @@ func (s *Service) UpdateReviewMode(ctx context.Context, input UpdateReviewModeIn
 			session.ApprovalStatus = "not_started"
 		}
 	}
+	session.History = append(session.History, newHistoryEntry("hirer", "review_mode_updated", "Changed review mode to "+session.ReviewMode+"."))
 	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
@@ -251,6 +269,7 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 	}
 
 	session.Audit = report
+	session.History = append(session.History, newHistoryEntry("system", "audit_completed", fmt.Sprintf("Completed onboarding audit across %s.", strings.Join(report.ConnectedPlatforms, ", "))))
 	session.UpdatedAt = time.Now().UTC()
 	if report.Status == "completed" && allRequiredAnswered(session.Questions) {
 		session.Status = StatusReady
@@ -295,6 +314,7 @@ func (s *Service) Activate(ctx context.Context, sessionID string) (Session, erro
 		Summary:         buildActivationSummary(session),
 		GeneratedAt:     time.Now().UTC(),
 	}
+	session.History = append(session.History, newHistoryEntry("system", "activation_generated", "Generated week-one plan and activation drafts for X and LinkedIn."))
 	if session.ReviewMode == "manual" {
 		session.ApprovalStatus = "pending"
 		session.Status = StatusAwaitingApproval
@@ -306,6 +326,7 @@ func (s *Service) Activate(ctx context.Context, sessionID string) (Session, erro
 		session.Activation.Status = "scheduled"
 		session.ApprovalStatus = "not_required"
 		session.Status = StatusActivated
+		session.History = append(session.History, newHistoryEntry("system", "activation_auto_scheduled", "Auto mode scheduled the first-week posts at performance-informed publish times."))
 	}
 	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
@@ -332,6 +353,7 @@ func (s *Service) ApproveActivation(ctx context.Context, sessionID string) (Sess
 	session.Status = StatusActivated
 	session.Activation.Status = "approved"
 	session.Activation.Drafts = scheduledDrafts
+	session.History = append(session.History, newHistoryEntry("hirer", "activation_approved", "Approved activation and scheduled the first week of posts."))
 	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
@@ -368,11 +390,73 @@ func (s *Service) UpdateActivationPlan(ctx context.Context, input UpdateActivati
 	session.Activation.WeekPlan = plan
 	session.Activation.Drafts = drafts
 	session.Activation.Status = "generated"
+	session.History = append(session.History, newHistoryEntry("hirer", "activation_plan_updated", "Updated the week-one activation plan before go-live."))
 	session.UpdatedAt = time.Now().UTC()
 	if session.ReviewMode == "manual" {
 		session.ApprovalStatus = "pending"
 		session.Status = StatusAwaitingApproval
 	}
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
+}
+
+func (s *Service) UpdateActivationDrafts(ctx context.Context, input UpdateActivationDraftsInput) (Session, error) {
+	if strings.TrimSpace(input.SessionID) == "" || len(input.Drafts) == 0 {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	session, err := s.repository.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if session.ApprovalStatus == "approved" || hasScheduledActivationDraft(session.Activation.Drafts) {
+		return Session{}, ErrActivationLocked
+	}
+
+	currentByID := make(map[string]ActivationDraft, len(session.Activation.Drafts))
+	for _, draft := range session.Activation.Drafts {
+		currentByID[draft.DraftID] = draft
+	}
+
+	updatedDrafts := make([]ActivationDraft, 0, len(input.Drafts))
+	for _, item := range input.Drafts {
+		existing, ok := currentByID[item.DraftID]
+		if !ok {
+			continue
+		}
+		contentDraft, err := s.contentService.GetByID(ctx, existing.DraftID)
+		if err != nil {
+			return Session{}, err
+		}
+
+		channel := strings.ToLower(strings.TrimSpace(item.Channel))
+		if channel != "x" && channel != "linkedin" {
+			channel = existing.Channel
+		}
+		contentDraft.Channel = channel
+		contentDraft.Hook = firstNonEmpty(strings.TrimSpace(item.Hook), contentDraft.Hook)
+		contentDraft.Body = firstNonEmpty(strings.TrimSpace(item.Body), contentDraft.Body)
+		contentDraft.Rationale = firstNonEmpty(strings.TrimSpace(item.Rationale), contentDraft.Rationale)
+		if err := s.contentService.UpdateDraft(ctx, contentDraft); err != nil {
+			return Session{}, err
+		}
+
+		existing.Channel = contentDraft.Channel
+		existing.Hook = contentDraft.Hook
+		existing.Body = contentDraft.Body
+		existing.Rationale = contentDraft.Rationale
+		updatedDrafts = append(updatedDrafts, existing)
+	}
+
+	if len(updatedDrafts) == 0 {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	session.Activation.Drafts = mergeActivationDrafts(session.Activation.Drafts, updatedDrafts)
+	session.History = append(session.History, newHistoryEntry("hirer", "activation_drafts_updated", "Edited activation draft copy before approval."))
+	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
@@ -838,6 +922,7 @@ func (s *Service) syncActivationDrafts(ctx context.Context, session Session, pla
 			DraftID:        draft.ID,
 			Channel:        draft.Channel,
 			Hook:           draft.Hook,
+			Body:           draft.Body,
 			Rationale:      draft.Rationale,
 			ScheduleID:     scheduleIDForIndex(session.Activation.Drafts, index),
 			ScheduleStatus: scheduleStatusForIndex(session.Activation.Drafts, index),
@@ -867,12 +952,16 @@ func (s *Service) scheduleActivationDrafts(ctx context.Context, drafts []Activat
 		if strings.TrimSpace(items[index].ScheduleID) != "" {
 			continue
 		}
+		recommendedAt := scheduledTimes[index]
+		if s.publishingService != nil {
+			recommendedAt = s.publishingService.RecommendNextTime(ctx, items[index].Channel, recommendedAt.Add(-1*time.Minute))
+		}
 
 		schedule, err := s.publishingService.Create(ctx, publishing.CreateInput{
 			DraftID:      items[index].DraftID,
 			VariantLabel: "",
 			Channel:      items[index].Channel,
-			ScheduledFor: scheduledTimes[index],
+			ScheduledFor: recommendedAt,
 		})
 		if err != nil {
 			return nil, err
@@ -1006,6 +1095,33 @@ func nextBusinessDay(from time.Time) time.Time {
 		day = day.AddDate(0, 0, 1)
 	}
 	return day
+}
+
+func mergeActivationDrafts(current []ActivationDraft, updates []ActivationDraft) []ActivationDraft {
+	updatedByID := make(map[string]ActivationDraft, len(updates))
+	for _, item := range updates {
+		updatedByID[item.DraftID] = item
+	}
+
+	items := make([]ActivationDraft, 0, len(current))
+	for _, item := range current {
+		if updated, ok := updatedByID[item.DraftID]; ok {
+			items = append(items, updated)
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+func newHistoryEntry(actor, action, description string) HistoryEntry {
+	return HistoryEntry{
+		ID:          "hist-" + uuid.NewString(),
+		Actor:       strings.TrimSpace(actor),
+		Action:      strings.TrimSpace(action),
+		Description: strings.TrimSpace(description),
+		CreatedAt:   time.Now().UTC(),
+	}
 }
 
 func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {

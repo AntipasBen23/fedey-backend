@@ -6,29 +6,37 @@ import (
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/internal/content"
+	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedinplatform "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
 type Service struct {
-	repository      Repository
-	contentService  *content.Service
-	xClient         *xplatform.Client
-	xAccountService *xaccounts.Service
-	linkedinClient  *linkedinplatform.Client
-	linkedinService *linkedinaccounts.Service
+	repository         Repository
+	contentService     *content.Service
+	experimentService  *experiments.Service
+	performanceService *performance.Service
+	defaultWindows     []Window
+	xClient            *xplatform.Client
+	xAccountService    *xaccounts.Service
+	linkedinClient     *linkedinplatform.Client
+	linkedinService    *linkedinaccounts.Service
 }
 
-func NewService(repository Repository, contentService *content.Service, xClient *xplatform.Client, xAccountService *xaccounts.Service, linkedinClient *linkedinplatform.Client, linkedinService *linkedinaccounts.Service) *Service {
+func NewService(repository Repository, contentService *content.Service, experimentService *experiments.Service, performanceService *performance.Service, defaultWindows []Window, xClient *xplatform.Client, xAccountService *xaccounts.Service, linkedinClient *linkedinplatform.Client, linkedinService *linkedinaccounts.Service) *Service {
 	return &Service{
-		repository:      repository,
-		contentService:  contentService,
-		xClient:         xClient,
-		xAccountService: xAccountService,
-		linkedinClient:  linkedinClient,
-		linkedinService: linkedinService,
+		repository:         repository,
+		contentService:     contentService,
+		experimentService:  experimentService,
+		performanceService: performanceService,
+		defaultWindows:     append([]Window(nil), defaultWindows...),
+		xClient:            xClient,
+		xAccountService:    xAccountService,
+		linkedinClient:     linkedinClient,
+		linkedinService:    linkedinService,
 	}
 }
 
@@ -62,6 +70,23 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Schedule, erro
 	})
 }
 
+func (s *Service) RecommendNextTime(ctx context.Context, channel string, after time.Time) time.Time {
+	channel = strings.ToLower(strings.TrimSpace(channel))
+	if after.IsZero() {
+		after = time.Now().UTC()
+	}
+
+	fallbackHours := fallbackHoursFromWindows(s.defaultWindows)
+	bestHours := fallbackHours
+	if s.performanceService != nil {
+		if hours, err := s.performanceService.BestHours(ctx, channel, fallbackHours); err == nil && len(hours) > 0 {
+			bestHours = hours
+		}
+	}
+
+	return nextOptimalTime(after, bestHours)
+}
+
 func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedule, error) {
 	if strings.TrimSpace(scheduleID) == "" {
 		return Schedule{}, ErrInvalidScheduleInput
@@ -71,17 +96,16 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 	if err != nil {
 		return Schedule{}, err
 	}
+	draft, err := s.contentService.GetByID(ctx, schedule.DraftID)
+	if err != nil {
+		return Schedule{}, err
+	}
 
 	platformPostID := ""
 	switch {
 	case strings.EqualFold(schedule.Channel, "x"):
 		if s.xClient == nil {
 			return Schedule{}, ErrInvalidScheduleInput
-		}
-
-		draft, err := s.contentService.GetByID(ctx, schedule.DraftID)
-		if err != nil {
-			return Schedule{}, err
 		}
 
 		credentials, err := s.resolveXCredentials(ctx)
@@ -99,11 +123,6 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 			return Schedule{}, ErrInvalidScheduleInput
 		}
 
-		draft, err := s.contentService.GetByID(ctx, schedule.DraftID)
-		if err != nil {
-			return Schedule{}, err
-		}
-
 		account, err := s.linkedinService.GetActive(ctx)
 		if err != nil {
 			return Schedule{}, err
@@ -114,6 +133,19 @@ func (s *Service) MarkPublished(ctx context.Context, scheduleID string) (Schedul
 			return Schedule{}, err
 		}
 		platformPostID = postID
+	}
+
+	if s.experimentService != nil && draft.ExperimentID != "" {
+		_, _ = s.experimentService.UpdateStatus(ctx, draft.ExperimentID, experiments.StatusRunning)
+		variant := strings.TrimSpace(schedule.VariantLabel)
+		if variant == "" {
+			variant = "A"
+		}
+		_ = s.experimentService.RecordMetric(ctx, experiments.RecordMetricInput{
+			ExperimentID: draft.ExperimentID,
+			Variant:      variant,
+			Value:        0,
+		})
 	}
 
 	return s.repository.MarkPublished(ctx, strings.TrimSpace(scheduleID), platformPostID)
@@ -176,4 +208,35 @@ func buildPublishText(draft content.Draft, variantLabel string) string {
 	}
 
 	return draft.Hook + "\n\n" + draft.Body
+}
+
+func fallbackHoursFromWindows(windows []Window) []int {
+	if len(windows) == 0 {
+		return []int{9, 12, 15}
+	}
+	result := make([]int, 0, len(windows))
+	for _, window := range windows {
+		result = append(result, window.Hour)
+	}
+	return result
+}
+
+func nextOptimalTime(after time.Time, hours []int) time.Time {
+	if len(hours) == 0 {
+		hours = []int{9, 12, 15}
+	}
+	current := after.UTC()
+	for dayOffset := 0; dayOffset < 7; dayOffset++ {
+		day := current.AddDate(0, 0, dayOffset)
+		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+			continue
+		}
+		for _, hour := range hours {
+			candidate := time.Date(day.Year(), day.Month(), day.Day(), hour, 0, 0, 0, time.UTC)
+			if candidate.After(current) {
+				return candidate
+			}
+		}
+	}
+	return current.Add(24 * time.Hour)
 }

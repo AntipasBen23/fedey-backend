@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
     approval_status TEXT NOT NULL DEFAULT 'not_required',
     audit JSONB NOT NULL DEFAULT '{}'::jsonb,
     activation JSONB NOT NULL DEFAULT '{}'::jsonb,
+    history JSONB NOT NULL DEFAULT '[]'::jsonb,
     status TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS activation JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS review_mode TEXT NOT NULL DEFAULT 'auto';
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'not_required';
+ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS history JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS onboarding_questions (
     id TEXT PRIMARY KEY,
@@ -172,11 +174,14 @@ CREATE TABLE IF NOT EXISTS platform_performance_snapshots (
     reply_count INTEGER NOT NULL DEFAULT 0,
     quote_count INTEGER NOT NULL DEFAULT 0,
     comment_count INTEGER NOT NULL DEFAULT 0,
+    published_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_platform_performance_platform_captured_at
     ON platform_performance_snapshots(platform, captured_at DESC);
+
+ALTER TABLE platform_performance_snapshots ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,

@@ -29,6 +29,7 @@ type Session struct {
 	Questions       []Question     `json:"questions"`
 	Audit           AuditReport    `json:"audit"`
 	Activation      ActivationPlan `json:"activation"`
+	History         []HistoryEntry `json:"history"`
 	Status          SessionStatus  `json:"status"`
 	CreatedAt       time.Time      `json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
@@ -77,10 +78,19 @@ type ActivationDraft struct {
 	DraftID        string    `json:"draftId"`
 	Channel        string    `json:"channel"`
 	Hook           string    `json:"hook"`
+	Body           string    `json:"body"`
 	Rationale      string    `json:"rationale"`
 	ScheduleID     string    `json:"scheduleId,omitempty"`
 	ScheduleStatus string    `json:"scheduleStatus,omitempty"`
 	ScheduledFor   time.Time `json:"scheduledFor,omitempty"`
+}
+
+type HistoryEntry struct {
+	ID          string    `json:"id"`
+	Actor       string    `json:"actor"`
+	Action      string    `json:"action"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type CreateSessionInput struct {
@@ -109,4 +119,9 @@ type UpdateReviewModeInput struct {
 type UpdateActivationPlanInput struct {
 	SessionID string           `json:"sessionId"`
 	WeekPlan  []ActivationItem `json:"weekPlan"`
+}
+
+type UpdateActivationDraftsInput struct {
+	SessionID string            `json:"sessionId"`
+	Drafts    []ActivationDraft `json:"drafts"`
 }

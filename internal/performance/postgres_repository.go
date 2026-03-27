@@ -24,8 +24,8 @@ func (r *PostgresRepository) SaveBatch(ctx context.Context, snapshots []Snapshot
 	batch := &pgx.Batch{}
 	for _, snapshot := range snapshots {
 		batch.Queue(
-			`INSERT INTO platform_performance_snapshots (id, platform, external_post_id, author_ref, content_preview, like_count, reply_count, quote_count, comment_count, captured_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			`INSERT INTO platform_performance_snapshots (id, platform, external_post_id, author_ref, content_preview, like_count, reply_count, quote_count, comment_count, published_at, captured_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 			snapshot.ID,
 			snapshot.Platform,
 			snapshot.ExternalPostID,
@@ -35,6 +35,7 @@ func (r *PostgresRepository) SaveBatch(ctx context.Context, snapshots []Snapshot
 			snapshot.ReplyCount,
 			snapshot.QuoteCount,
 			snapshot.CommentCount,
+			snapshot.PublishedAt,
 			snapshot.CapturedAt,
 		)
 	}
@@ -56,7 +57,7 @@ func (r *PostgresRepository) ListRecent(ctx context.Context, platform string, li
 	}
 
 	const query = `
-		SELECT id, platform, external_post_id, author_ref, content_preview, like_count, reply_count, quote_count, comment_count, captured_at
+		SELECT id, platform, external_post_id, author_ref, content_preview, like_count, reply_count, quote_count, comment_count, published_at, captured_at
 		FROM platform_performance_snapshots
 		WHERE ($1 = '' OR platform = $1)
 		ORDER BY captured_at DESC
@@ -82,6 +83,7 @@ func (r *PostgresRepository) ListRecent(ctx context.Context, platform string, li
 			&item.ReplyCount,
 			&item.QuoteCount,
 			&item.CommentCount,
+			&item.PublishedAt,
 			&item.CapturedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan platform performance snapshot: %w", err)

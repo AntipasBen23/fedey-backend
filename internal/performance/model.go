@@ -12,6 +12,7 @@ type Snapshot struct {
 	ReplyCount     int       `json:"replyCount"`
 	QuoteCount     int       `json:"quoteCount"`
 	CommentCount   int       `json:"commentCount"`
+	PublishedAt    time.Time `json:"publishedAt"`
 	CapturedAt     time.Time `json:"capturedAt"`
 }
 
