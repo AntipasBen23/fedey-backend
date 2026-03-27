@@ -9,6 +9,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	"github.com/AntipasBen23/fedey-backend/internal/onboarding"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/server/handlers"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
@@ -25,6 +26,7 @@ type Dependencies struct {
 	AutomationService  *automation.Service
 	XAccountService    *xaccounts.Service
 	LinkedInService    *linkedinaccounts.Service
+	OnboardingService  *onboarding.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -45,6 +47,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	automationHandler := handlers.NewAutomationHandler(deps.AutomationService)
 	xAccountsHandler := handlers.NewXAccountsHandler(deps.XAccountService)
 	linkedinAccountsHandler := handlers.NewLinkedInAccountsHandler(deps.LinkedInService)
+	onboardingHandler := handlers.NewOnboardingHandler(deps.OnboardingService)
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /v1/health", handlers.HealthV1)
@@ -75,6 +78,10 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /v1/integrations/linkedin/status", linkedinAccountsHandler.Status)
 	mux.HandleFunc("GET /v1/integrations/linkedin/connect", linkedinAccountsHandler.StartConnect)
 	mux.HandleFunc("GET /v1/integrations/linkedin/callback", linkedinAccountsHandler.Callback)
+	mux.HandleFunc("GET /v1/onboarding/sessions", onboardingHandler.ListSessions)
+	mux.HandleFunc("POST /v1/onboarding/sessions", onboardingHandler.CreateSession)
+	mux.HandleFunc("POST /v1/onboarding/sessions/{id}/questions/answer", onboardingHandler.AnswerQuestion)
+	mux.HandleFunc("POST /v1/onboarding/sessions/{id}/audit", onboardingHandler.RunAudit)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)

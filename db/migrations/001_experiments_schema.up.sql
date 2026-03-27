@@ -72,6 +72,36 @@ CREATE TABLE IF NOT EXISTS community_inbox (
 
 CREATE INDEX IF NOT EXISTS idx_community_inbox_created_at ON community_inbox(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS onboarding_sessions (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    job_description TEXT NOT NULL,
+    account_mode TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    primary_platform TEXT NOT NULL,
+    brand_name TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    voice_summary TEXT NOT NULL,
+    constraints TEXT[] NOT NULL DEFAULT '{}',
+    audit JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS onboarding_questions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES onboarding_sessions(id) ON DELETE CASCADE,
+    prompt TEXT NOT NULL,
+    category TEXT NOT NULL,
+    answer TEXT NULL,
+    required BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    answered_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_onboarding_questions_session_id ON onboarding_questions(session_id);
+
 CREATE TABLE IF NOT EXISTS automation_runs (
     id TEXT PRIMARY KEY,
     status TEXT NOT NULL,

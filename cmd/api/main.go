@@ -17,6 +17,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	"github.com/AntipasBen23/fedey-backend/internal/onboarding"
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
@@ -75,6 +76,7 @@ func main() {
 	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), xClient, xAccountService)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
@@ -93,6 +95,7 @@ func main() {
 			AutomationService:  automationService,
 			XAccountService:    xAccountService,
 			LinkedInService:    linkedinAccountService,
+			OnboardingService:  onboardingService,
 		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,

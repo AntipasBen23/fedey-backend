@@ -26,6 +26,13 @@ type Mention struct {
 	CreatedAt time.Time
 }
 
+type UserPost struct {
+	ID        string
+	Text      string
+	ReplyToID string
+	CreatedAt time.Time
+}
+
 type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
@@ -288,4 +295,69 @@ func (c *Client) FetchMentionsWithCredentials(ctx context.Context, accessToken, 
 	}
 
 	return mentions, nil
+}
+
+func (c *Client) FetchUserPostsWithToken(ctx context.Context, accessToken, userID string, maxResults int) ([]UserPost, error) {
+	if strings.TrimSpace(accessToken) == "" || strings.TrimSpace(userID) == "" {
+		return nil, fmt.Errorf("x client is not configured")
+	}
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	query := url.Values{}
+	query.Set("max_results", fmt.Sprintf("%d", maxResults))
+	query.Set("tweet.fields", "created_at,referenced_tweets")
+	endpoint := fmt.Sprintf("%s/2/users/%s/tweets?%s", c.baseURL, strings.TrimSpace(userID), query.Encode())
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build x user posts request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("perform x user posts request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("x user posts failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result struct {
+		Data []struct {
+			ID               string `json:"id"`
+			Text             string `json:"text"`
+			CreatedAt        string `json:"created_at"`
+			ReferencedTweets []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"referenced_tweets"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode x user posts response: %w", err)
+	}
+
+	posts := make([]UserPost, 0, len(result.Data))
+	for _, item := range result.Data {
+		replyToID := ""
+		for _, ref := range item.ReferencedTweets {
+			if ref.Type == "replied_to" {
+				replyToID = ref.ID
+				break
+			}
+		}
+		createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
+		posts = append(posts, UserPost{
+			ID:        item.ID,
+			Text:      item.Text,
+			ReplyToID: replyToID,
+			CreatedAt: createdAt,
+		})
+	}
+
+	return posts, nil
 }

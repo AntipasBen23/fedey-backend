@@ -1,0 +1,68 @@
+package onboarding
+
+import "time"
+
+type SessionStatus string
+
+const (
+	StatusDraft      SessionStatus = "draft"
+	StatusInterview  SessionStatus = "interview"
+	StatusReady      SessionStatus = "ready"
+	StatusAuditReady SessionStatus = "audit_ready"
+)
+
+type Session struct {
+	ID              string        `json:"id"`
+	Title           string        `json:"title"`
+	JobDescription  string        `json:"jobDescription"`
+	AccountMode     string        `json:"accountMode"`
+	Objective       string        `json:"objective"`
+	PrimaryPlatform string        `json:"primaryPlatform"`
+	BrandName       string        `json:"brandName"`
+	Audience        string        `json:"audience"`
+	VoiceSummary    string        `json:"voiceSummary"`
+	Constraints     []string      `json:"constraints"`
+	Questions       []Question    `json:"questions"`
+	Audit           AuditReport   `json:"audit"`
+	Status          SessionStatus `json:"status"`
+	CreatedAt       time.Time     `json:"createdAt"`
+	UpdatedAt       time.Time     `json:"updatedAt"`
+}
+
+type Question struct {
+	ID         string    `json:"id"`
+	SessionID  string    `json:"sessionId"`
+	Prompt     string    `json:"prompt"`
+	Category   string    `json:"category"`
+	Answer     string    `json:"answer,omitempty"`
+	Required   bool      `json:"required"`
+	CreatedAt  time.Time `json:"createdAt"`
+	AnsweredAt time.Time `json:"answeredAt,omitempty"`
+}
+
+type AuditReport struct {
+	Status             string    `json:"status"`
+	ConnectedPlatforms []string  `json:"connectedPlatforms"`
+	PostsReviewed      int       `json:"postsReviewed"`
+	ReplyPatterns      []string  `json:"replyPatterns"`
+	ContentPatterns    []string  `json:"contentPatterns"`
+	Recommendations    []string  `json:"recommendations"`
+	LastRunAt          time.Time `json:"lastRunAt,omitempty"`
+}
+
+type CreateSessionInput struct {
+	Title           string   `json:"title"`
+	JobDescription  string   `json:"jobDescription"`
+	AccountMode     string   `json:"accountMode"`
+	Objective       string   `json:"objective"`
+	PrimaryPlatform string   `json:"primaryPlatform"`
+	BrandName       string   `json:"brandName"`
+	Audience        string   `json:"audience"`
+	Constraints     []string `json:"constraints"`
+}
+
+type AnswerQuestionInput struct {
+	SessionID  string `json:"sessionId"`
+	QuestionID string `json:"questionId"`
+	Answer     string `json:"answer"`
+}
