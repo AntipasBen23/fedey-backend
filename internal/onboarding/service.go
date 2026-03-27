@@ -12,8 +12,10 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedinplatform "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
+	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
@@ -21,6 +23,9 @@ type Service struct {
 	repository         Repository
 	brandMemoryService *brandmemory.Service
 	contentService     *content.Service
+	performanceService *performance.Service
+	publishingService  *publishing.Service
+	activationWindows  []publishing.Window
 	xClient            *xplatform.Client
 	xAccountService    *xaccounts.Service
 	linkedinClient     *linkedinplatform.Client
@@ -31,6 +36,9 @@ func NewService(
 	repository Repository,
 	brandMemoryService *brandmemory.Service,
 	contentService *content.Service,
+	performanceService *performance.Service,
+	publishingService *publishing.Service,
+	activationWindows []publishing.Window,
 	xClient *xplatform.Client,
 	xAccountService *xaccounts.Service,
 	linkedinClient *linkedinplatform.Client,
@@ -40,6 +48,9 @@ func NewService(
 		repository:         repository,
 		brandMemoryService: brandMemoryService,
 		contentService:     contentService,
+		performanceService: performanceService,
+		publishingService:  publishingService,
+		activationWindows:  append([]publishing.Window(nil), activationWindows...),
 		xClient:            xClient,
 		xAccountService:    xAccountService,
 		linkedinClient:     linkedinClient,
@@ -145,8 +156,15 @@ func (s *Service) UpdateReviewMode(ctx context.Context, input UpdateReviewModeIn
 	}
 	session.ReviewMode = normalizeReviewMode(input.ReviewMode)
 	if session.ReviewMode == "auto" {
+		if session.Activation.Status == "generated" && !hasScheduledActivationDraft(session.Activation.Drafts) {
+			session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+			if err != nil {
+				return Session{}, err
+			}
+			session.Activation.Status = "scheduled"
+		}
 		session.ApprovalStatus = "not_required"
-		if session.Activation.Status == "generated" || session.Activation.Status == "approved" {
+		if session.Activation.Status == "generated" || session.Activation.Status == "approved" || session.Activation.Status == "scheduled" {
 			session.Status = StatusActivated
 		}
 	} else {
@@ -180,6 +198,10 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 		LastRunAt: time.Now().UTC(),
 	}
 
+	if s.performanceService != nil {
+		_, _ = s.performanceService.SyncConnectedAccounts(ctx)
+	}
+
 	if account, err := s.resolveXCredentials(ctx); err == nil && s.xClient != nil {
 		if posts, err := s.xClient.FetchUserPostsWithToken(ctx, account.AccessToken, account.UserID, 15); err == nil {
 			report.ConnectedPlatforms = append(report.ConnectedPlatforms, "x")
@@ -187,7 +209,7 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 			report.ContentPatterns = append(report.ContentPatterns, deriveXContentPatterns(posts)...)
 			report.ReplyPatterns = append(report.ReplyPatterns, deriveXReplyPatterns(posts)...)
 			report.Recommendations = append(report.Recommendations, deriveXRecommendations(posts, session)...)
-			report.Recommendations = append(report.Recommendations, deriveXPerformanceInsights(posts)...)
+			report.PerformanceInsights = append(report.PerformanceInsights, deriveXPerformanceInsights(posts)...)
 		}
 	}
 
@@ -199,7 +221,16 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 			replyPatterns, recommendations := s.deriveLinkedInConversationPatterns(ctx, account, posts)
 			report.ReplyPatterns = append(report.ReplyPatterns, replyPatterns...)
 			report.Recommendations = append(report.Recommendations, recommendations...)
-			report.Recommendations = append(report.Recommendations, deriveLinkedInPerformanceInsights(ctx, account, posts, s.linkedinClient)...)
+			report.PerformanceInsights = append(report.PerformanceInsights, deriveLinkedInPerformanceInsights(ctx, account, posts, s.linkedinClient)...)
+		}
+	}
+
+	if s.performanceService != nil {
+		if insights, err := s.performanceService.Insights(ctx, "x"); err == nil {
+			report.PerformanceInsights = append(report.PerformanceInsights, insights...)
+		}
+		if insights, err := s.performanceService.Insights(ctx, "linkedin"); err == nil {
+			report.PerformanceInsights = append(report.PerformanceInsights, insights...)
 		}
 	}
 
@@ -207,6 +238,7 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 	report.ContentPatterns = uniqueStrings(report.ContentPatterns)
 	report.ReplyPatterns = uniqueStrings(report.ReplyPatterns)
 	report.Recommendations = uniqueStrings(report.Recommendations)
+	report.PerformanceInsights = uniqueStrings(report.PerformanceInsights)
 
 	if len(report.ConnectedPlatforms) == 0 {
 		report.Status = "waiting_for_connections"
@@ -246,8 +278,11 @@ func (s *Service) Activate(ctx context.Context, sessionID string) (Session, erro
 		return Session{}, err
 	}
 
-	plan := buildWeekPlan(session)
-	drafts, err := s.generateActivationDrafts(ctx, session, plan)
+	plan := session.Activation.WeekPlan
+	if len(plan) == 0 {
+		plan = buildWeekPlan(session)
+	}
+	drafts, err := s.syncActivationDrafts(ctx, session, plan)
 	if err != nil {
 		return Session{}, err
 	}
@@ -264,6 +299,11 @@ func (s *Service) Activate(ctx context.Context, sessionID string) (Session, erro
 		session.ApprovalStatus = "pending"
 		session.Status = StatusAwaitingApproval
 	} else {
+		session.Activation.Drafts, err = s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+		if err != nil {
+			return Session{}, err
+		}
+		session.Activation.Status = "scheduled"
 		session.ApprovalStatus = "not_required"
 		session.Status = StatusActivated
 	}
@@ -283,10 +323,56 @@ func (s *Service) ApproveActivation(ctx context.Context, sessionID string) (Sess
 		return Session{}, ErrInvalidSessionInput
 	}
 
+	scheduledDrafts, err := s.scheduleActivationDrafts(ctx, session.Activation.Drafts)
+	if err != nil {
+		return Session{}, err
+	}
+
 	session.ApprovalStatus = "approved"
 	session.Status = StatusActivated
 	session.Activation.Status = "approved"
+	session.Activation.Drafts = scheduledDrafts
 	session.UpdatedAt = time.Now().UTC()
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
+}
+
+func (s *Service) UpdateActivationPlan(ctx context.Context, input UpdateActivationPlanInput) (Session, error) {
+	if strings.TrimSpace(input.SessionID) == "" || len(input.WeekPlan) == 0 {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	session, err := s.repository.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if session.ApprovalStatus == "approved" || hasScheduledActivationDraft(session.Activation.Drafts) {
+		return Session{}, ErrActivationLocked
+	}
+	if session.Activation.Status == "" || session.Activation.Status == "not_started" {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	plan := normalizeActivationPlan(input.WeekPlan)
+	if len(plan) == 0 {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	drafts, err := s.syncActivationDrafts(ctx, session, plan)
+	if err != nil {
+		return Session{}, err
+	}
+
+	session.Activation.WeekPlan = plan
+	session.Activation.Drafts = drafts
+	session.Activation.Status = "generated"
+	session.UpdatedAt = time.Now().UTC()
+	if session.ReviewMode == "manual" {
+		session.ApprovalStatus = "pending"
+		session.Status = StatusAwaitingApproval
+	}
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
@@ -721,18 +807,19 @@ func buildActivationSummary(session Session) string {
 	)
 }
 
-func (s *Service) generateActivationDrafts(ctx context.Context, session Session, plan []ActivationItem) ([]ActivationDraft, error) {
+func (s *Service) syncActivationDrafts(ctx context.Context, session Session, plan []ActivationItem) ([]ActivationDraft, error) {
 	if s.contentService == nil {
 		return nil, nil
 	}
 
-	drafts := make([]content.Draft, 0, len(plan))
+	newDrafts := make([]content.Draft, 0, len(plan))
+	updatedDrafts := make([]content.Draft, 0, len(plan))
 	summaries := make([]ActivationDraft, 0, len(plan))
 	now := time.Now().UTC()
 	for index, item := range plan {
 		hook, body := buildActivationCopy(session, item)
 		draft := content.Draft{
-			ID:          "draft-" + uuid.NewString(),
+			ID:          draftIDForIndex(session.Activation.Drafts, index),
 			Channel:     item.Channel,
 			Hook:        hook,
 			Body:        body,
@@ -741,19 +828,60 @@ func (s *Service) generateActivationDrafts(ctx context.Context, session Session,
 			Status:      "draft",
 			CreatedAt:   now.Add(time.Duration(index) * time.Minute),
 		}
-		drafts = append(drafts, draft)
+		if draft.ID == "" {
+			draft.ID = "draft-" + uuid.NewString()
+			newDrafts = append(newDrafts, draft)
+		} else {
+			updatedDrafts = append(updatedDrafts, draft)
+		}
 		summaries = append(summaries, ActivationDraft{
-			DraftID:   draft.ID,
-			Channel:   draft.Channel,
-			Hook:      draft.Hook,
-			Rationale: draft.Rationale,
+			DraftID:        draft.ID,
+			Channel:        draft.Channel,
+			Hook:           draft.Hook,
+			Rationale:      draft.Rationale,
+			ScheduleID:     scheduleIDForIndex(session.Activation.Drafts, index),
+			ScheduleStatus: scheduleStatusForIndex(session.Activation.Drafts, index),
+			ScheduledFor:   scheduledForForIndex(session.Activation.Drafts, index),
 		})
 	}
 
-	if err := s.contentService.SaveBatch(ctx, drafts); err != nil {
+	if err := s.contentService.SaveBatch(ctx, newDrafts); err != nil {
 		return nil, err
 	}
+	for _, draft := range updatedDrafts {
+		if err := s.contentService.UpdateDraft(ctx, draft); err != nil {
+			return nil, err
+		}
+	}
 	return summaries, nil
+}
+
+func (s *Service) scheduleActivationDrafts(ctx context.Context, drafts []ActivationDraft) ([]ActivationDraft, error) {
+	if s.publishingService == nil || len(drafts) == 0 {
+		return drafts, nil
+	}
+
+	scheduledTimes := activationScheduleTimes(time.Now().UTC(), len(drafts), s.activationWindows)
+	items := append([]ActivationDraft(nil), drafts...)
+	for index := range items {
+		if strings.TrimSpace(items[index].ScheduleID) != "" {
+			continue
+		}
+
+		schedule, err := s.publishingService.Create(ctx, publishing.CreateInput{
+			DraftID:      items[index].DraftID,
+			VariantLabel: "",
+			Channel:      items[index].Channel,
+			ScheduledFor: scheduledTimes[index],
+		})
+		if err != nil {
+			return nil, err
+		}
+		items[index].ScheduleID = schedule.ID
+		items[index].ScheduleStatus = string(schedule.Status)
+		items[index].ScheduledFor = schedule.ScheduledFor
+	}
+	return items, nil
 }
 
 func buildActivationCopy(session Session, item ActivationItem) (string, string) {
@@ -777,6 +905,107 @@ func buildActivationCopy(session Session, item ActivationItem) (string, string) 
 				item.Hypothesis,
 			)
 	}
+}
+
+func normalizeActivationPlan(items []ActivationItem) []ActivationItem {
+	plan := make([]ActivationItem, 0, len(items))
+	for index, item := range items {
+		channel := strings.ToLower(strings.TrimSpace(item.Channel))
+		if channel != "x" && channel != "linkedin" {
+			continue
+		}
+		day := strings.TrimSpace(item.Day)
+		if day == "" {
+			day = fmt.Sprintf("Day %d", index+1)
+		}
+		focus := strings.TrimSpace(item.Focus)
+		format := strings.TrimSpace(item.Format)
+		hypothesis := strings.TrimSpace(item.Hypothesis)
+		if focus == "" || format == "" || hypothesis == "" {
+			continue
+		}
+		plan = append(plan, ActivationItem{
+			Day:        day,
+			Channel:    channel,
+			Focus:      focus,
+			Format:     format,
+			Hypothesis: hypothesis,
+		})
+	}
+	return plan
+}
+
+func hasScheduledActivationDraft(drafts []ActivationDraft) bool {
+	for _, draft := range drafts {
+		if strings.TrimSpace(draft.ScheduleID) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func draftIDForIndex(drafts []ActivationDraft, index int) string {
+	if index < len(drafts) {
+		return drafts[index].DraftID
+	}
+	return ""
+}
+
+func scheduleIDForIndex(drafts []ActivationDraft, index int) string {
+	if index < len(drafts) {
+		return drafts[index].ScheduleID
+	}
+	return ""
+}
+
+func scheduleStatusForIndex(drafts []ActivationDraft, index int) string {
+	if index < len(drafts) {
+		return drafts[index].ScheduleStatus
+	}
+	return ""
+}
+
+func scheduledForForIndex(drafts []ActivationDraft, index int) time.Time {
+	if index < len(drafts) {
+		return drafts[index].ScheduledFor
+	}
+	return time.Time{}
+}
+
+func activationScheduleTimes(now time.Time, count int, windows []publishing.Window) []time.Time {
+	defaultWindows := []publishing.Window{
+		{Hour: 9, Minute: 0, Label: "09:00"},
+		{Hour: 13, Minute: 0, Label: "13:00"},
+	}
+	if len(windows) == 0 {
+		windows = defaultWindows
+	}
+
+	items := make([]time.Time, 0, count)
+	base := nextBusinessDay(now)
+	for index := 0; index < count; index++ {
+		window := windows[index%len(windows)]
+		day := base.AddDate(0, 0, index)
+		day = nextBusinessDay(day)
+		candidate := time.Date(day.Year(), day.Month(), day.Day(), window.Hour, window.Minute, 0, 0, time.UTC)
+		if !candidate.After(now.UTC()) {
+			nextDay := nextBusinessDay(day.AddDate(0, 0, 1))
+			candidate = time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), window.Hour, window.Minute, 0, 0, time.UTC)
+		}
+		items = append(items, candidate)
+	}
+	return items
+}
+
+func nextBusinessDay(from time.Time) time.Time {
+	day := from.UTC()
+	if !day.IsZero() && (day.Hour() > 20 || day.Hour() < 6) {
+		day = day.AddDate(0, 0, 1)
+	}
+	for day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+		day = day.AddDate(0, 0, 1)
+	}
+	return day
 }
 
 func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {

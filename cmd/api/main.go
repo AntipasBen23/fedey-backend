@@ -18,6 +18,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
 	"github.com/AntipasBen23/fedey-backend/internal/onboarding"
+	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
@@ -74,11 +75,13 @@ func main() {
 	contentService := content.NewService(contentRepository, brandMemoryService, trendService, experimentService)
 	publishingRepository := publishing.NewRepository(pool)
 	publishingService := publishing.NewService(publishingRepository, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	performanceRepository := performance.NewRepository(pool)
+	performanceService := performance.NewService(performanceRepository, xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, performanceService, publishingService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService)
 	automationRepository := automation.NewRepository(pool)
-	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
+	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, performanceService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
 		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
 	})

@@ -141,3 +141,27 @@ func (h *OnboardingHandler) ApproveActivation(w http.ResponseWriter, r *http.Req
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (h *OnboardingHandler) UpdateActivationPlan(w http.ResponseWriter, r *http.Request) {
+	var request onboarding.UpdateActivationPlanInput
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	request.SessionID = r.PathValue("id")
+
+	item, err := h.service.UpdateActivationPlan(r.Context(), request)
+	if errors.Is(err, onboarding.ErrInvalidSessionInput) || errors.Is(err, onboarding.ErrActivationLocked) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrSessionNotFound) {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update activation plan")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}

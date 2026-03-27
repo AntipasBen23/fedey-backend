@@ -113,6 +113,14 @@ func (s *Service) SaveBatch(ctx context.Context, drafts []Draft) error {
 	return s.repository.SaveBatch(ctx, drafts)
 }
 
+func (s *Service) UpdateDraft(ctx context.Context, draft Draft) error {
+	if strings.TrimSpace(draft.ID) == "" {
+		return ErrInvalidVariantRequest
+	}
+
+	return s.repository.Update(ctx, draft)
+}
+
 func buildDrafts(profile brandmemory.Profile, signals []trends.Signal) []Draft {
 	now := time.Now().UTC()
 	if len(signals) == 0 {

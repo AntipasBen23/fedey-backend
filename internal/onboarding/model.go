@@ -46,13 +46,14 @@ type Question struct {
 }
 
 type AuditReport struct {
-	Status             string    `json:"status"`
-	ConnectedPlatforms []string  `json:"connectedPlatforms"`
-	PostsReviewed      int       `json:"postsReviewed"`
-	ReplyPatterns      []string  `json:"replyPatterns"`
-	ContentPatterns    []string  `json:"contentPatterns"`
-	Recommendations    []string  `json:"recommendations"`
-	LastRunAt          time.Time `json:"lastRunAt,omitempty"`
+	Status              string    `json:"status"`
+	ConnectedPlatforms  []string  `json:"connectedPlatforms"`
+	PostsReviewed       int       `json:"postsReviewed"`
+	ReplyPatterns       []string  `json:"replyPatterns"`
+	ContentPatterns     []string  `json:"contentPatterns"`
+	Recommendations     []string  `json:"recommendations"`
+	PerformanceInsights []string  `json:"performanceInsights"`
+	LastRunAt           time.Time `json:"lastRunAt,omitempty"`
 }
 
 type ActivationPlan struct {
@@ -73,10 +74,13 @@ type ActivationItem struct {
 }
 
 type ActivationDraft struct {
-	DraftID   string `json:"draftId"`
-	Channel   string `json:"channel"`
-	Hook      string `json:"hook"`
-	Rationale string `json:"rationale"`
+	DraftID        string    `json:"draftId"`
+	Channel        string    `json:"channel"`
+	Hook           string    `json:"hook"`
+	Rationale      string    `json:"rationale"`
+	ScheduleID     string    `json:"scheduleId,omitempty"`
+	ScheduleStatus string    `json:"scheduleStatus,omitempty"`
+	ScheduledFor   time.Time `json:"scheduledFor,omitempty"`
 }
 
 type CreateSessionInput struct {
@@ -100,4 +104,9 @@ type AnswerQuestionInput struct {
 type UpdateReviewModeInput struct {
 	SessionID  string `json:"sessionId"`
 	ReviewMode string `json:"reviewMode"`
+}
+
+type UpdateActivationPlanInput struct {
+	SessionID string           `json:"sessionId"`
+	WeekPlan  []ActivationItem `json:"weekPlan"`
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
+	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
 	"github.com/AntipasBen23/fedey-backend/internal/trends"
 )
@@ -21,6 +22,7 @@ type Service struct {
 	contentService     *content.Service
 	publishingService  *publishing.Service
 	communityService   *community.Service
+	performanceService *performance.Service
 	settings           Settings
 }
 
@@ -31,6 +33,7 @@ func NewService(
 	contentService *content.Service,
 	publishingService *publishing.Service,
 	communityService *community.Service,
+	performanceService *performance.Service,
 	settings Settings,
 ) *Service {
 	return &Service{
@@ -40,6 +43,7 @@ func NewService(
 		contentService:     contentService,
 		publishingService:  publishingService,
 		communityService:   communityService,
+		performanceService: performanceService,
 		settings:           settings,
 	}
 }
@@ -74,6 +78,14 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 			if err == nil {
 				run.SignalsIngested = len(signals)
 			}
+		}
+	}
+
+	performanceSnapshots := 0
+	if s.performanceService != nil {
+		result, err := s.performanceService.SyncConnectedAccounts(ctx)
+		if err == nil {
+			performanceSnapshots = result.XSnapshots + result.LinkedInSnapshots
 		}
 	}
 
@@ -141,9 +153,10 @@ func (s *Service) Run(ctx context.Context, triggeredBy string) (Run, error) {
 	}
 
 	run.Notes = fmt.Sprintf(
-		"Published %d posts, ingested %d live signals, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
+		"Published %d posts, ingested %d live signals, synced %d performance snapshots, generated %d drafts, created %d schedule, synced %d mentions, drafted %d replies.",
 		run.PostsPublished,
 		run.SignalsIngested,
+		performanceSnapshots,
 		run.DraftsGenerated,
 		run.SchedulesCreated,
 		run.MentionsSynced,

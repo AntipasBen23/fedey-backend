@@ -162,6 +162,22 @@ CREATE TABLE IF NOT EXISTS linkedin_oauth_states (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS platform_performance_snapshots (
+    id TEXT PRIMARY KEY,
+    platform TEXT NOT NULL,
+    external_post_id TEXT NOT NULL,
+    author_ref TEXT NOT NULL,
+    content_preview TEXT NOT NULL,
+    like_count INTEGER NOT NULL DEFAULT 0,
+    reply_count INTEGER NOT NULL DEFAULT 0,
+    quote_count INTEGER NOT NULL DEFAULT 0,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_platform_performance_platform_captured_at
+    ON platform_performance_snapshots(platform, captured_at DESC);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL,

@@ -12,6 +12,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	x "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/publishing"
@@ -66,8 +67,9 @@ func main() {
 	trendService := trends.NewService(trends.NewRepository(pool))
 	contentService := content.NewService(content.NewRepository(pool), brandMemoryService, trendService, experimentService)
 	publishingService := publishing.NewService(publishing.NewRepository(pool), contentService, xClient, xAccountService, linkedinClient, linkedinAccountService)
+	performanceService := performance.NewService(performance.NewRepository(pool), xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityService := community.NewService(community.NewRepository(pool), brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	automationService := automation.NewService(automation.NewRepository(pool), brandMemoryService, trendService, contentService, publishingService, communityService, automation.Settings{
+	automationService := automation.NewService(automation.NewRepository(pool), brandMemoryService, trendService, contentService, publishingService, communityService, performanceService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
 		Windows:  publishing.ParseWindows(cfg.PublishWindows()),
 	})
