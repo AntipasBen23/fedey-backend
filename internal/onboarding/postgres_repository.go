@@ -20,7 +20,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at
 		FROM onboarding_sessions
 		ORDER BY created_at DESC
 	`
@@ -48,14 +48,18 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 
 func (r *PostgresRepository) CreateSession(ctx context.Context, session Session) error {
 	const query = `
-		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 	`
 	auditPayload, err := json.Marshal(session.Audit)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding audit: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, session.Status, session.CreatedAt, session.UpdatedAt)
+	activationPayload, err := json.Marshal(session.Activation)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding activation: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, activationPayload, session.Status, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create onboarding session: %w", err)
 	}
@@ -65,14 +69,18 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session) error {
 	const query = `
 		UPDATE onboarding_sessions
-		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, audit=$11, status=$12, updated_at=$13
+		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, audit=$11, activation=$12, status=$13, updated_at=$14
 		WHERE id=$1
 	`
 	auditPayload, err := json.Marshal(session.Audit)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding audit: %w", err)
 	}
-	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, session.Status, session.UpdatedAt)
+	activationPayload, err := json.Marshal(session.Activation)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding activation: %w", err)
+	}
+	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, auditPayload, activationPayload, session.Status, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("update onboarding session: %w", err)
 	}
@@ -84,7 +92,7 @@ func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session)
 
 func (r *PostgresRepository) GetSession(ctx context.Context, sessionID string) (Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, audit, activation, status, created_at, updated_at
 		FROM onboarding_sessions
 		WHERE id = $1
 	`
@@ -165,13 +173,19 @@ type sessionScanner interface {
 func scanSession(scanner sessionScanner) (Session, error) {
 	var session Session
 	var auditPayload []byte
-	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &auditPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
+	var activationPayload []byte
+	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &auditPayload, &activationPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
 		return Session{}, err
 	}
 	if len(auditPayload) > 0 {
 		if err := json.Unmarshal(auditPayload, &session.Audit); err != nil {
 			return Session{}, fmt.Errorf("unmarshal onboarding audit: %w", err)
+		}
+	}
+	if len(activationPayload) > 0 {
+		if err := json.Unmarshal(activationPayload, &session.Activation); err != nil {
+			return Session{}, fmt.Errorf("unmarshal onboarding activation: %w", err)
 		}
 	}
 	return session, nil

@@ -82,6 +82,7 @@ func registerRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /v1/onboarding/sessions", onboardingHandler.CreateSession)
 	mux.HandleFunc("POST /v1/onboarding/sessions/{id}/questions/answer", onboardingHandler.AnswerQuestion)
 	mux.HandleFunc("POST /v1/onboarding/sessions/{id}/audit", onboardingHandler.RunAudit)
+	mux.HandleFunc("POST /v1/onboarding/sessions/{id}/activate", onboardingHandler.Activate)
 
 	mux.HandleFunc("POST /v1/experiments", experimentsHandler.Create)
 	mux.HandleFunc("GET /v1/experiments", experimentsHandler.List)

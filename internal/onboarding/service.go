@@ -9,21 +9,37 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	linkedinplatform "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
 	"github.com/AntipasBen23/fedey-backend/internal/xaccounts"
 )
 
 type Service struct {
-	repository      Repository
-	xClient         *xplatform.Client
-	xAccountService *xaccounts.Service
+	repository         Repository
+	brandMemoryService *brandmemory.Service
+	xClient            *xplatform.Client
+	xAccountService    *xaccounts.Service
+	linkedinClient     *linkedinplatform.Client
+	linkedinService    *linkedinaccounts.Service
 }
 
-func NewService(repository Repository, xClient *xplatform.Client, xAccountService *xaccounts.Service) *Service {
+func NewService(
+	repository Repository,
+	brandMemoryService *brandmemory.Service,
+	xClient *xplatform.Client,
+	xAccountService *xaccounts.Service,
+	linkedinClient *linkedinplatform.Client,
+	linkedinService *linkedinaccounts.Service,
+) *Service {
 	return &Service{
-		repository:      repository,
-		xClient:         xClient,
-		xAccountService: xAccountService,
+		repository:         repository,
+		brandMemoryService: brandMemoryService,
+		xClient:            xClient,
+		xAccountService:    xAccountService,
+		linkedinClient:     linkedinClient,
+		linkedinService:    linkedinService,
 	}
 }
 
@@ -51,6 +67,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		Audit: AuditReport{
 			Status: "not_started",
 		},
+		Activation: ActivationPlan{
+			Status: "not_started",
+		},
 		Status:    StatusInterview,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -70,7 +89,10 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		}
 	}
 	session.Questions = questions
-	return session, nil
+	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
 }
 
 func (s *Service) AnswerQuestion(ctx context.Context, input AnswerQuestionInput) (Session, error) {
@@ -93,14 +115,17 @@ func (s *Service) AnswerQuestion(ctx context.Context, input AnswerQuestionInput)
 		return Session{}, err
 	}
 	session.Questions, _ = s.repository.ListQuestions(ctx, session.ID)
-	if allRequiredAnswered(session.Questions) {
+	if allRequiredAnswered(session.Questions) && session.AccountMode == "new" {
 		session.Status = StatusReady
-		session.UpdatedAt = time.Now().UTC()
-		if err := s.repository.UpdateSession(ctx, session); err != nil {
-			return Session{}, err
-		}
 	}
-	return session, nil
+	session.UpdatedAt = time.Now().UTC()
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
 }
 
 func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, error) {
@@ -117,25 +142,40 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 		LastRunAt: time.Now().UTC(),
 	}
 
-	account, err := s.resolveXCredentials(ctx)
-	if err == nil && s.xClient != nil {
-		posts, err := s.xClient.FetchUserPostsWithToken(ctx, account.AccessToken, account.UserID, 15)
-		if err == nil {
+	if account, err := s.resolveXCredentials(ctx); err == nil && s.xClient != nil {
+		if posts, err := s.xClient.FetchUserPostsWithToken(ctx, account.AccessToken, account.UserID, 15); err == nil {
 			report.ConnectedPlatforms = append(report.ConnectedPlatforms, "x")
-			report.PostsReviewed = len(posts)
-			report.ContentPatterns = deriveContentPatterns(posts)
-			report.ReplyPatterns = deriveReplyPatterns(posts)
-			report.Recommendations = deriveRecommendations(posts, session)
-			report.Status = "completed"
+			report.PostsReviewed += len(posts)
+			report.ContentPatterns = append(report.ContentPatterns, deriveXContentPatterns(posts)...)
+			report.ReplyPatterns = append(report.ReplyPatterns, deriveXReplyPatterns(posts)...)
+			report.Recommendations = append(report.Recommendations, deriveXRecommendations(posts, session)...)
 		}
 	}
+
+	if account, err := s.resolveLinkedInCredentials(ctx); err == nil && s.linkedinClient != nil {
+		if posts, err := s.linkedinClient.ListAuthorPosts(ctx, account.AccessToken, account.AuthorURN, 10); err == nil {
+			report.ConnectedPlatforms = append(report.ConnectedPlatforms, "linkedin")
+			report.PostsReviewed += len(posts)
+			report.ContentPatterns = append(report.ContentPatterns, deriveLinkedInContentPatterns(posts)...)
+			replyPatterns, recommendations := s.deriveLinkedInConversationPatterns(ctx, account, posts)
+			report.ReplyPatterns = append(report.ReplyPatterns, replyPatterns...)
+			report.Recommendations = append(report.Recommendations, recommendations...)
+		}
+	}
+
+	report.ConnectedPlatforms = uniqueStrings(report.ConnectedPlatforms)
+	report.ContentPatterns = uniqueStrings(report.ContentPatterns)
+	report.ReplyPatterns = uniqueStrings(report.ReplyPatterns)
+	report.Recommendations = uniqueStrings(report.Recommendations)
 
 	if len(report.ConnectedPlatforms) == 0 {
 		report.Status = "waiting_for_connections"
 		report.Recommendations = []string{
-			"Connect an existing X account so the agent can learn from historical posts and replies.",
-			"Add brand voice preferences or answer follow-up questions to sharpen the onboarding model.",
+			"Connect an existing X or LinkedIn account so the agent can learn from historical posts and replies.",
+			"Answer the follow-up questions so the onboarding model has enough context to build a brand profile.",
 		}
+	} else {
+		report.Status = "completed"
 	}
 
 	session.Audit = report
@@ -143,6 +183,38 @@ func (s *Service) RunAudit(ctx context.Context, sessionID string) (Session, erro
 	if report.Status == "completed" && allRequiredAnswered(session.Questions) {
 		session.Status = StatusReady
 	}
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
+}
+
+func (s *Service) Activate(ctx context.Context, sessionID string) (Session, error) {
+	session, err := s.repository.GetSession(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if !allRequiredAnswered(session.Questions) {
+		return Session{}, ErrInvalidSessionInput
+	}
+
+	updatedSession, err := s.syncBrandMemory(ctx, session)
+	if err != nil {
+		return Session{}, err
+	}
+	session = updatedSession
+	session.Activation = ActivationPlan{
+		Status:          "generated",
+		BrandMemorySync: true,
+		WeekPlan:        buildWeekPlan(session),
+		Summary:         buildActivationSummary(session),
+		GeneratedAt:     time.Now().UTC(),
+	}
+	session.Status = StatusActivated
+	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
@@ -236,8 +308,6 @@ func inferPlatform(description string) string {
 	switch {
 	case strings.Contains(lower, "linkedin"):
 		return "linkedin"
-	case strings.Contains(lower, "instagram"):
-		return "instagram"
 	default:
 		return "x"
 	}
@@ -261,7 +331,7 @@ func inferVoice(description string) string {
 	return strings.Join(parts, ", ")
 }
 
-func deriveContentPatterns(posts []xplatform.UserPost) []string {
+func deriveXContentPatterns(posts []xplatform.UserPost) []string {
 	if len(posts) == 0 {
 		return nil
 	}
@@ -279,28 +349,109 @@ func deriveContentPatterns(posts []xplatform.UserPost) []string {
 	}
 	averageLength /= len(posts)
 	patterns := []string{
-		fmt.Sprintf("Average post length is %d characters.", averageLength),
-		fmt.Sprintf("%d of the last %d posts were replies, which shows how conversational the account already is.", replyCount, len(posts)),
+		fmt.Sprintf("On X, average post length is %d characters.", averageLength),
+		fmt.Sprintf("On X, %d of the last %d posts were replies, which shows how conversational the account already is.", replyCount, len(posts)),
 	}
 	if threadStarters > 0 {
-		patterns = append(patterns, fmt.Sprintf("%d recent posts used multi-line structure, which suggests the audience tolerates thread-style formatting.", threadStarters))
+		patterns = append(patterns, fmt.Sprintf("On X, %d recent posts used multi-line structure, which suggests the audience tolerates thread-style formatting.", threadStarters))
 	}
 	return patterns
 }
 
-func deriveReplyPatterns(posts []xplatform.UserPost) []string {
-	patterns := []string{}
-	openings := make(map[string]int)
+func deriveXReplyPatterns(posts []xplatform.UserPost) []string {
+	return deriveOpeningPatterns(
+		posts,
+		func(post xplatform.UserPost) bool { return post.ReplyToID != "" },
+		func(post xplatform.UserPost) string { return post.Text },
+		"X replies",
+	)
+}
+
+func deriveXRecommendations(posts []xplatform.UserPost, session Session) []string {
+	recommendations := []string{
+		fmt.Sprintf("Keep the X structure familiar in early drafts so the audience recognizes continuity for %s.", session.BrandName),
+	}
+	if len(posts) >= 10 {
+		recommendations = append(recommendations, "The X account has enough recent material to preserve structure first and optimize later.")
+	}
+	return recommendations
+}
+
+func deriveLinkedInContentPatterns(posts []linkedinplatform.Post) []string {
+	if len(posts) == 0 {
+		return nil
+	}
+	averageLength := 0
 	for _, post := range posts {
-		if post.ReplyToID == "" {
+		averageLength += len(post.Commentary)
+	}
+	averageLength /= len(posts)
+	return []string{
+		fmt.Sprintf("On LinkedIn, average post length is %d characters.", averageLength),
+		"LinkedIn history should keep a professional, insight-led structure unless onboarding answers suggest a sharper shift.",
+	}
+}
+
+func (s *Service) deriveLinkedInConversationPatterns(ctx context.Context, account linkedinaccounts.Account, posts []linkedinplatform.Post) ([]string, []string) {
+	var replyPatterns []string
+	var recommendations []string
+	for _, post := range posts {
+		comments, err := s.linkedinClient.ListComments(ctx, account.AccessToken, normalizeLinkedInPostURN(post.ID), 10)
+		if err != nil {
 			continue
 		}
-		words := strings.Fields(post.Text)
+
+		authoredReplies := 0
+		externalComments := 0
+		openings := []linkedinplatform.Comment{}
+		for _, comment := range comments {
+			if strings.EqualFold(comment.ActorURN, account.AuthorURN) {
+				authoredReplies++
+				openings = append(openings, comment)
+				continue
+			}
+			externalComments++
+		}
+		if authoredReplies > 0 || externalComments > 0 {
+			replyPatterns = append(replyPatterns, fmt.Sprintf("On LinkedIn, the post %s has %d audience comments and %d authored replies.", normalizeLinkedInPostURN(post.ID), externalComments, authoredReplies))
+		}
+		replyPatterns = append(replyPatterns, deriveCommentOpeningPatterns(openings, "LinkedIn replies")...)
+	}
+
+	if len(posts) > 0 {
+		recommendations = append(recommendations, "Keep LinkedIn posts more polished and insight-heavy than X while preserving the same core positioning.")
+	}
+	return uniqueStrings(replyPatterns), uniqueStrings(recommendations)
+}
+
+func deriveOpeningPatterns[T any](items []T, predicate func(T) bool, text func(T) string, prefix string) []string {
+	openings := make(map[string]int)
+	for _, item := range items {
+		if !predicate(item) {
+			continue
+		}
+		words := strings.Fields(text(item))
 		if len(words) == 0 {
 			continue
 		}
 		openings[strings.ToLower(words[0])]++
 	}
+	return topOpeningPatterns(openings, prefix)
+}
+
+func deriveCommentOpeningPatterns(items []linkedinplatform.Comment, prefix string) []string {
+	openings := make(map[string]int)
+	for _, item := range items {
+		words := strings.Fields(item.Message)
+		if len(words) == 0 {
+			continue
+		}
+		openings[strings.ToLower(words[0])]++
+	}
+	return topOpeningPatterns(openings, prefix)
+}
+
+func topOpeningPatterns(openings map[string]int, prefix string) []string {
 	type openingCount struct {
 		word  string
 		count int
@@ -312,27 +463,133 @@ func deriveReplyPatterns(posts []xplatform.UserPost) []string {
 	slices.SortFunc(counts, func(left, right openingCount) int {
 		return right.count - left.count
 	})
+
+	var patterns []string
 	for index, item := range counts {
 		if index >= 2 {
 			break
 		}
-		patterns = append(patterns, fmt.Sprintf("Replies often open with '%s', which is part of the existing response rhythm.", item.word))
+		patterns = append(patterns, fmt.Sprintf("%s often open with '%s'.", prefix, item.word))
 	}
 	if len(patterns) == 0 {
-		patterns = append(patterns, "The account has limited recent public reply history, so the agent should rely on interview answers for reply tone.")
+		patterns = append(patterns, fmt.Sprintf("%s have limited recent public history, so the agent should combine audit learning with onboarding answers.", prefix))
 	}
 	return patterns
 }
 
-func deriveRecommendations(posts []xplatform.UserPost, session Session) []string {
-	recommendations := []string{
-		fmt.Sprintf("Keep the %s-first structure in early drafts so the audience recognizes continuity.", session.PrimaryPlatform),
-		"Preserve familiar hooks from the existing account for week one, then begin controlled improvements through experiments.",
+func (s *Service) syncBrandMemory(ctx context.Context, session Session) (Session, error) {
+	if s.brandMemoryService == nil {
+		return session, nil
 	}
-	if len(posts) >= 10 {
-		recommendations = append(recommendations, "The account has enough recent material to clone structure before optimizing tone and timing.")
+
+	tone, audience, pillars, guardrails := deriveBrandMemoryFields(session)
+	brandName := firstNonEmpty(session.BrandName, session.Title)
+	if brandName == "" || tone == "" || audience == "" {
+		return session, nil
 	}
-	return recommendations
+
+	profile, err := s.brandMemoryService.Upsert(ctx, brandmemory.UpsertInput{
+		BrandName:  brandName,
+		Tone:       tone,
+		Audience:   audience,
+		Pillars:    pillars,
+		Guardrails: guardrails,
+	})
+	if err != nil {
+		return session, err
+	}
+
+	session.BrandName = profile.BrandName
+	session.Audience = profile.Audience
+	session.VoiceSummary = profile.Tone
+	session.Constraints = profile.Guardrails
+	session.UpdatedAt = time.Now().UTC()
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return session, err
+	}
+	return session, nil
+}
+
+func deriveBrandMemoryFields(session Session) (string, string, []string, []string) {
+	tone := firstNonEmpty(session.VoiceSummary, inferVoice(session.JobDescription))
+	audience := firstNonEmpty(session.Audience, answerForCategory(session.Questions, "audience"))
+	if audience == "" {
+		audience = "Founders and operators who want strategic social growth"
+	}
+	guardrails := normalizeStrings(append([]string{}, session.Constraints...))
+	if answer := answerForCategory(session.Questions, "guardrails"); answer != "" {
+		guardrails = append(guardrails, splitByComma(answer)...)
+	}
+	guardrails = uniqueStrings(guardrails)
+	pillars := inferPillars(session)
+	return tone, audience, pillars, guardrails
+}
+
+func inferPillars(session Session) []string {
+	var pillars []string
+	if session.Objective != "" {
+		pillars = append(pillars, session.Objective)
+	}
+	if session.PrimaryPlatform != "" {
+		pillars = append(pillars, session.PrimaryPlatform+" growth")
+	}
+	if len(session.Audit.ContentPatterns) > 0 {
+		pillars = append(pillars, truncate(session.Audit.ContentPatterns[0], 80))
+	}
+	if answer := answerForCategory(session.Questions, "style_reference"); answer != "" {
+		pillars = append(pillars, truncate(answer, 80))
+	}
+	if len(pillars) == 0 {
+		pillars = append(pillars, "authority building", "audience education")
+	}
+	return uniqueStrings(pillars)
+}
+
+func buildWeekPlan(session Session) []ActivationItem {
+	channels := []string{"x", "linkedin"}
+	focuses := []string{
+		"brand-introduction insight",
+		"authority-building lesson",
+		"comment-driven reply thread",
+		"case-study style proof point",
+		"opinion-led weekly recap",
+	}
+	formats := map[string]string{
+		"x":        "thread or sharp multi-post sequence",
+		"linkedin": "professional insight post",
+	}
+	hypothesis := buildActivationHypothesis(session)
+
+	plan := make([]ActivationItem, 0, 5)
+	for index := 0; index < 5; index++ {
+		channel := channels[index%len(channels)]
+		plan = append(plan, ActivationItem{
+			Day:        fmt.Sprintf("Day %d", index+1),
+			Channel:    channel,
+			Focus:      focuses[index],
+			Format:     formats[channel],
+			Hypothesis: hypothesis,
+		})
+	}
+	return plan
+}
+
+func buildActivationHypothesis(session Session) string {
+	if len(session.Audit.Recommendations) > 0 {
+		return session.Audit.Recommendations[0]
+	}
+	if session.Objective != "" {
+		return "Consistent X and LinkedIn execution should improve " + session.Objective + " within the first week."
+	}
+	return "A coordinated X and LinkedIn presence should establish a recognizable voice within the first week."
+}
+
+func buildActivationSummary(session Session) string {
+	return fmt.Sprintf(
+		"Activation plan generated for %s. The agent will start with X and LinkedIn, preserve learned structural patterns, and test improvements against the goal to %s.",
+		firstNonEmpty(session.BrandName, session.Title),
+		firstNonEmpty(session.Objective, "grow attention"),
+	)
 }
 
 func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, error) {
@@ -340,6 +597,22 @@ func (s *Service) resolveXCredentials(ctx context.Context) (xaccounts.Account, e
 		return xaccounts.Account{}, ErrInvalidSessionInput
 	}
 	return s.xAccountService.GetActive(ctx)
+}
+
+func (s *Service) resolveLinkedInCredentials(ctx context.Context) (linkedinaccounts.Account, error) {
+	if s.linkedinService == nil {
+		return linkedinaccounts.Account{}, ErrInvalidSessionInput
+	}
+	return s.linkedinService.GetActive(ctx)
+}
+
+func answerForCategory(questions []Question, category string) string {
+	for _, question := range questions {
+		if question.Category == category && strings.TrimSpace(question.Answer) != "" {
+			return question.Answer
+		}
+	}
+	return ""
 }
 
 func normalizeStrings(values []string) []string {
@@ -351,6 +624,37 @@ func normalizeStrings(values []string) []string {
 		}
 	}
 	return items
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	items := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		items = append(items, trimmed)
+	}
+	return items
+}
+
+func splitByComma(value string) []string {
+	parts := strings.Split(value, ",")
+	return normalizeStrings(parts)
+}
+
+func normalizeLinkedInPostURN(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "urn:") {
+		return trimmed
+	}
+	return "urn:li:ugcPost:" + trimmed
 }
 
 func firstNonEmpty(value, fallback string) string {

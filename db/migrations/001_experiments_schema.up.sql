@@ -84,10 +84,13 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
     voice_summary TEXT NOT NULL,
     constraints TEXT[] NOT NULL DEFAULT '{}',
     audit JSONB NOT NULL DEFAULT '{}'::jsonb,
+    activation JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS activation JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS onboarding_questions (
     id TEXT PRIMARY KEY,

@@ -83,3 +83,20 @@ func (h *OnboardingHandler) RunAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (h *OnboardingHandler) Activate(w http.ResponseWriter, r *http.Request) {
+	item, err := h.service.Activate(r.Context(), r.PathValue("id"))
+	if errors.Is(err, onboarding.ErrInvalidSessionInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrSessionNotFound) {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to activate onboarding session")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}

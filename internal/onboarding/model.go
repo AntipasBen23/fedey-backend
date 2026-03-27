@@ -9,24 +9,26 @@ const (
 	StatusInterview  SessionStatus = "interview"
 	StatusReady      SessionStatus = "ready"
 	StatusAuditReady SessionStatus = "audit_ready"
+	StatusActivated  SessionStatus = "activated"
 )
 
 type Session struct {
-	ID              string        `json:"id"`
-	Title           string        `json:"title"`
-	JobDescription  string        `json:"jobDescription"`
-	AccountMode     string        `json:"accountMode"`
-	Objective       string        `json:"objective"`
-	PrimaryPlatform string        `json:"primaryPlatform"`
-	BrandName       string        `json:"brandName"`
-	Audience        string        `json:"audience"`
-	VoiceSummary    string        `json:"voiceSummary"`
-	Constraints     []string      `json:"constraints"`
-	Questions       []Question    `json:"questions"`
-	Audit           AuditReport   `json:"audit"`
-	Status          SessionStatus `json:"status"`
-	CreatedAt       time.Time     `json:"createdAt"`
-	UpdatedAt       time.Time     `json:"updatedAt"`
+	ID              string         `json:"id"`
+	Title           string         `json:"title"`
+	JobDescription  string         `json:"jobDescription"`
+	AccountMode     string         `json:"accountMode"`
+	Objective       string         `json:"objective"`
+	PrimaryPlatform string         `json:"primaryPlatform"`
+	BrandName       string         `json:"brandName"`
+	Audience        string         `json:"audience"`
+	VoiceSummary    string         `json:"voiceSummary"`
+	Constraints     []string       `json:"constraints"`
+	Questions       []Question     `json:"questions"`
+	Audit           AuditReport    `json:"audit"`
+	Activation      ActivationPlan `json:"activation"`
+	Status          SessionStatus  `json:"status"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
 }
 
 type Question struct {
@@ -48,6 +50,22 @@ type AuditReport struct {
 	ContentPatterns    []string  `json:"contentPatterns"`
 	Recommendations    []string  `json:"recommendations"`
 	LastRunAt          time.Time `json:"lastRunAt,omitempty"`
+}
+
+type ActivationPlan struct {
+	Status          string           `json:"status"`
+	BrandMemorySync bool             `json:"brandMemorySync"`
+	WeekPlan        []ActivationItem `json:"weekPlan"`
+	Summary         string           `json:"summary"`
+	GeneratedAt     time.Time        `json:"generatedAt,omitempty"`
+}
+
+type ActivationItem struct {
+	Day        string `json:"day"`
+	Channel    string `json:"channel"`
+	Focus      string `json:"focus"`
+	Format     string `json:"format"`
+	Hypothesis string `json:"hypothesis"`
 }
 
 type CreateSessionInput struct {

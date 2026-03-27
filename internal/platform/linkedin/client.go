@@ -38,6 +38,13 @@ type Comment struct {
 	ActorURN  string
 	Message   string
 	ObjectURN string
+	ParentURN string
+}
+
+type Post struct {
+	ID         string
+	Commentary string
+	CreatedAt  time.Time
 }
 
 func NewClient(apiBaseURL string) *Client {
@@ -198,6 +205,7 @@ func (c *Client) ListComments(ctx context.Context, accessToken, targetURN string
 			ID      string `json:"id"`
 			Actor   string `json:"actor"`
 			Object  string `json:"object"`
+			Parent  string `json:"parentComment"`
 			Message struct {
 				Text string `json:"text"`
 			} `json:"message"`
@@ -214,6 +222,7 @@ func (c *Client) ListComments(ctx context.Context, accessToken, targetURN string
 			ActorURN:  item.Actor,
 			Message:   item.Message.Text,
 			ObjectURN: item.Object,
+			ParentURN: item.Parent,
 		})
 	}
 
@@ -270,4 +279,58 @@ func (c *Client) CreateComment(ctx context.Context, accessToken, actorURN, objec
 	}
 
 	return "", nil
+}
+
+func (c *Client) ListAuthorPosts(ctx context.Context, accessToken, authorURN string, count int) ([]Post, error) {
+	if count <= 0 {
+		count = 10
+	}
+
+	query := url.Values{}
+	query.Set("author", strings.TrimSpace(authorURN))
+	query.Set("q", "author")
+	query.Set("count", fmt.Sprintf("%d", count))
+	query.Set("sortBy", "LAST_MODIFIED")
+	endpoint := c.apiBaseURL + "/rest/posts?" + query.Encode()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build linkedin author posts request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+	request.Header.Set("X-Restli-Protocol-Version", "2.0.0")
+	request.Header.Set("Linkedin-Version", currentLinkedInVersion)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("perform linkedin author posts request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		payload, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("linkedin author posts failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result struct {
+		Elements []struct {
+			ID         string `json:"id"`
+			Commentary string `json:"commentary"`
+			CreatedAt  int64  `json:"createdAt"`
+		} `json:"elements"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode linkedin author posts response: %w", err)
+	}
+
+	posts := make([]Post, 0, len(result.Elements))
+	for _, item := range result.Elements {
+		posts = append(posts, Post{
+			ID:         item.ID,
+			Commentary: item.Commentary,
+			CreatedAt:  time.UnixMilli(item.CreatedAt).UTC(),
+		})
+	}
+
+	return posts, nil
 }
