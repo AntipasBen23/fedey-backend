@@ -12,6 +12,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
+	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
 	openai "github.com/AntipasBen23/fedey-backend/internal/llm/openai"
 	"github.com/AntipasBen23/fedey-backend/internal/performance"
@@ -25,6 +26,7 @@ type Service struct {
 	repository         Repository
 	brandMemoryService *brandmemory.Service
 	contentService     *content.Service
+	experimentService  *experiments.Service
 	performanceService *performance.Service
 	publishingService  *publishing.Service
 	communityService   *community.Service
@@ -45,6 +47,7 @@ func NewService(
 	repository Repository,
 	brandMemoryService *brandmemory.Service,
 	contentService *content.Service,
+	experimentService *experiments.Service,
 	performanceService *performance.Service,
 	publishingService *publishing.Service,
 	communityService *community.Service,
@@ -59,6 +62,7 @@ func NewService(
 		repository:         repository,
 		brandMemoryService: brandMemoryService,
 		contentService:     contentService,
+		experimentService:  experimentService,
 		performanceService: performanceService,
 		publishingService:  publishingService,
 		communityService:   communityService,
@@ -734,6 +738,7 @@ func (s *Service) buildLiveContext(ctx context.Context) (string, error) {
 			lines = append(lines, "- next scheduled post: none")
 		}
 		lines = append(lines, fmt.Sprintf("- total schedules tracked: %d", len(schedules)))
+		lines = append(lines, s.buildSchedulingRationale(ctx)...)
 	}
 
 	if s.communityService != nil {
@@ -750,11 +755,80 @@ func (s *Service) buildLiveContext(ctx context.Context) (string, error) {
 		lines = append(lines, fmt.Sprintf("- replies waiting: %d", pendingReplies))
 	}
 
+	if s.performanceService != nil {
+		xInsights, err := s.performanceService.Insights(ctx, "x")
+		if err != nil {
+			return "", err
+		}
+		linkedinInsights, err := s.performanceService.Insights(ctx, "linkedin")
+		if err != nil {
+			return "", err
+		}
+		for _, insight := range append(xInsights, linkedinInsights...) {
+			lines = append(lines, "- performance insight: "+insight)
+		}
+	}
+
+	if s.experimentService != nil {
+		items, err := s.experimentService.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		for _, line := range summarizeExperiments(items) {
+			lines = append(lines, "- experiment: "+line)
+		}
+	}
+
 	if len(lines) == 0 {
 		lines = append(lines, "- no live operating context available yet")
 	}
 
 	return strings.Join(lines, "\n"), nil
+}
+
+func (s *Service) buildSchedulingRationale(ctx context.Context) []string {
+	now := time.Now().UTC()
+	lines := []string{}
+	if s.performanceService == nil || s.publishingService == nil {
+		return lines
+	}
+
+	if hours, err := s.performanceService.BestHours(ctx, "x", []int{9, 12, 15}); err == nil && len(hours) > 0 {
+		lines = append(lines, fmt.Sprintf("X best observed hours currently rank as %s.", joinHours(hours)))
+		lines = append(lines, fmt.Sprintf("Next recommended X slot would be %s.", s.publishingService.RecommendNextTime(ctx, "x", now, "existing").Format(time.RFC3339)))
+	}
+	if hours, err := s.performanceService.BestHours(ctx, "linkedin", []int{9, 13, 18}); err == nil && len(hours) > 0 {
+		lines = append(lines, fmt.Sprintf("LinkedIn best observed hours currently rank as %s.", joinHours(hours)))
+		lines = append(lines, fmt.Sprintf("Next recommended LinkedIn slot would be %s.", s.publishingService.RecommendNextTime(ctx, "linkedin", now, "existing").Format(time.RFC3339)))
+	}
+	return lines
+}
+
+func summarizeExperiments(items []experiments.Experiment) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	lines := make([]string, 0, min(len(items), 4))
+	for index, item := range items {
+		if index >= 4 {
+			break
+		}
+		line := fmt.Sprintf("%s experiment is %s on metric %s", item.ID, item.Status, item.Metric)
+		if item.Summary != nil && item.Summary.WinnerVariant != "" {
+			line += fmt.Sprintf(", current winner is variant %s with score %.2f and confidence %.2f", item.Summary.WinnerVariant, item.Summary.WinnerScore, item.Summary.Confidence)
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+func joinHours(hours []int) string {
+	formatted := make([]string, 0, len(hours))
+	for _, hour := range hours {
+		formatted = append(formatted, fmt.Sprintf("%02d:00", hour))
+	}
+	return strings.Join(formatted, ", ")
 }
 
 func allRequiredAnswered(questions []Question) bool {
