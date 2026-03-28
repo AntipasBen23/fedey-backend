@@ -25,6 +25,7 @@ func (r *MemoryRepository) List(_ context.Context) ([]Session, error) {
 
 	items := make([]Session, 0, len(r.sessions))
 	for _, session := range r.sessions {
+		session.ChatMessages = append([]ChatMessage(nil), session.ChatMessages...)
 		session.Questions = append([]Question(nil), r.questions[session.ID]...)
 		items = append(items, session)
 	}
@@ -59,6 +60,7 @@ func (r *MemoryRepository) GetSession(_ context.Context, sessionID string) (Sess
 	if !ok {
 		return Session{}, ErrSessionNotFound
 	}
+	session.ChatMessages = append([]ChatMessage(nil), session.ChatMessages...)
 	session.Questions = append([]Question(nil), r.questions[sessionID]...)
 	return session, nil
 }

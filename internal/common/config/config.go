@@ -8,6 +8,8 @@ const (
 	defaultAutomationInterval = "1h"
 	defaultXAPIBaseURL        = "https://api.x.com"
 	defaultLinkedInAPIBaseURL = "https://api.linkedin.com"
+	defaultOpenAIBaseURL      = "https://api.openai.com/v1"
+	defaultOpenAIModel        = "gpt-4.1-mini"
 	defaultWebAppURL          = "http://localhost:3000"
 	defaultPublishWindows     = "09:00,13:00,18:00"
 )
@@ -27,6 +29,9 @@ type Config struct {
 	linkedinClientID    string
 	linkedinSecret      string
 	linkedinRedirectURI string
+	openAIBaseURL       string
+	openAIAPIKey        string
+	openAIModel         string
 	webAppURL           string
 	publishWindows      string
 	encryptionKey       string
@@ -47,6 +52,9 @@ func Load() Config {
 		linkedinClientID:    os.Getenv("FEDEY_LINKEDIN_CLIENT_ID"),
 		linkedinSecret:      os.Getenv("FEDEY_LINKEDIN_CLIENT_SECRET"),
 		linkedinRedirectURI: getEnv("FEDEY_LINKEDIN_REDIRECT_URI", ""),
+		openAIBaseURL:       getEnv("FEDEY_OPENAI_BASE_URL", defaultOpenAIBaseURL),
+		openAIAPIKey:        os.Getenv("FEDEY_OPENAI_API_KEY"),
+		openAIModel:         getEnv("FEDEY_OPENAI_MODEL", defaultOpenAIModel),
 		webAppURL:           getEnv("FEDEY_WEB_APP_URL", defaultWebAppURL),
 		publishWindows:      getEnv("FEDEY_PUBLISH_WINDOWS", defaultPublishWindows),
 		encryptionKey:       os.Getenv("FEDEY_ENCRYPTION_KEY"),
@@ -99,6 +107,18 @@ func (c Config) LinkedInClientSecret() string {
 
 func (c Config) LinkedInRedirectURI() string {
 	return c.linkedinRedirectURI
+}
+
+func (c Config) OpenAIBaseURL() string {
+	return c.openAIBaseURL
+}
+
+func (c Config) OpenAIAPIKey() string {
+	return c.openAIAPIKey
+}
+
+func (c Config) OpenAIModel() string {
+	return c.openAIModel
 }
 
 func (c Config) WebAppURL() string {

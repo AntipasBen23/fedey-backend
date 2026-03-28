@@ -17,6 +17,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/experiments"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	openai "github.com/AntipasBen23/fedey-backend/internal/llm/openai"
 	"github.com/AntipasBen23/fedey-backend/internal/onboarding"
 	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedin "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
@@ -64,6 +65,7 @@ func main() {
 		cfg.LinkedInRedirectURI(),
 		cfg.WebAppURL(),
 	)
+	openAIClient := openai.NewClient(cfg.OpenAIBaseURL(), cfg.OpenAIAPIKey(), cfg.OpenAIModel())
 
 	experimentRepository := experiments.NewRepository(pool)
 	experimentService := experiments.NewService(experimentRepository)
@@ -79,7 +81,7 @@ func main() {
 	publishingService := publishing.NewService(publishingRepository, contentService, experimentService, performanceService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, performanceService, publishingService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService)
+	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, performanceService, publishingService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService, openAIClient)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, performanceService, automation.Settings{
 		Interval: cfg.AutomationInterval(),

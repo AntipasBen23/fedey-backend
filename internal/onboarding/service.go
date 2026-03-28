@@ -12,6 +12,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
+	openai "github.com/AntipasBen23/fedey-backend/internal/llm/openai"
 	"github.com/AntipasBen23/fedey-backend/internal/performance"
 	linkedinplatform "github.com/AntipasBen23/fedey-backend/internal/platform/linkedin"
 	xplatform "github.com/AntipasBen23/fedey-backend/internal/platform/x"
@@ -30,6 +31,12 @@ type Service struct {
 	xAccountService    *xaccounts.Service
 	linkedinClient     *linkedinplatform.Client
 	linkedinService    *linkedinaccounts.Service
+	chatResolver       chatResolver
+}
+
+type chatResolver interface {
+	Configured() bool
+	ResolveOnboardingChat(ctx context.Context, systemPrompt string, messages []openai.Message) (openai.OnboardingResolution, error)
 }
 
 func NewService(
@@ -43,6 +50,7 @@ func NewService(
 	xAccountService *xaccounts.Service,
 	linkedinClient *linkedinplatform.Client,
 	linkedinService *linkedinaccounts.Service,
+	chatResolver chatResolver,
 ) *Service {
 	return &Service{
 		repository:         repository,
@@ -55,6 +63,7 @@ func NewService(
 		xAccountService:    xAccountService,
 		linkedinClient:     linkedinClient,
 		linkedinService:    linkedinService,
+		chatResolver:       chatResolver,
 	}
 }
 
@@ -81,6 +90,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		Constraints:     normalizeStrings(input.Constraints),
 		ReviewMode:      normalizeReviewMode(input.ReviewMode),
 		ApprovalStatus:  initialApprovalStatus(input.ReviewMode),
+		ChatMessages:    seedChatMessages(input.JobDescription, input.BrandName),
 		Audit: AuditReport{
 			Status: "not_started",
 		},
@@ -113,6 +123,84 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return Session{}, err
 	}
 	session.History = append(session.History, newHistoryEntry("system", "brand_memory_synced", "Synced initial brand memory from onboarding inputs."))
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	return s.repository.GetSession(ctx, session.ID)
+}
+
+func (s *Service) Chat(ctx context.Context, input ChatInput) (Session, error) {
+	if strings.TrimSpace(input.SessionID) == "" || strings.TrimSpace(input.Message) == "" {
+		return Session{}, ErrInvalidSessionInput
+	}
+	if s.chatResolver == nil || !s.chatResolver.Configured() {
+		return Session{}, ErrChatUnavailable
+	}
+
+	session, err := s.repository.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	now := time.Now().UTC()
+	userMessage := ChatMessage{
+		ID:        "chat-" + uuid.NewString(),
+		Role:      "user",
+		Content:   strings.TrimSpace(input.Message),
+		CreatedAt: now,
+	}
+	session.ChatMessages = append(session.ChatMessages, userMessage)
+
+	resolution, err := s.chatResolver.ResolveOnboardingChat(
+		ctx,
+		buildOnboardingSystemPrompt(session),
+		buildChatTranscript(session),
+	)
+	if err != nil {
+		return Session{}, err
+	}
+
+	for _, item := range resolution.ResolvedAnswers {
+		if err := s.applyResolvedAnswer(ctx, &session, item.QuestionID, item.Answer); err != nil {
+			return Session{}, err
+		}
+	}
+	session.Questions, err = s.repository.ListQuestions(ctx, session.ID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	if allRequiredAnswered(session.Questions) {
+		if session.AccountMode == "existing" {
+			session.Status = StatusAuditReady
+		} else {
+			session.Status = StatusReady
+		}
+	}
+
+	session.ChatMessages = append(session.ChatMessages, ChatMessage{
+		ID:        "chat-" + uuid.NewString(),
+		Role:      "assistant",
+		Content:   strings.TrimSpace(resolution.AssistantMessage),
+		CreatedAt: time.Now().UTC(),
+	})
+	session.History = append(session.History,
+		newHistoryEntry("hirer", "chat_message_received", "Sent an onboarding chat message."),
+		newHistoryEntry("agent", "chat_response_generated", "Generated an onboarding chat reply and updated inferred answers."),
+	)
+	session.UpdatedAt = time.Now().UTC()
+	if err := s.repository.UpdateSession(ctx, session); err != nil {
+		return Session{}, err
+	}
+	if _, err := s.syncBrandMemory(ctx, session); err != nil {
+		return Session{}, err
+	}
+	session, err = s.repository.GetSession(ctx, session.ID)
+	if err != nil {
+		return Session{}, err
+	}
+	session.History = append(session.History, newHistoryEntry("system", "brand_memory_synced", "Updated brand memory from onboarding chat."))
+	session.UpdatedAt = time.Now().UTC()
 	if err := s.repository.UpdateSession(ctx, session); err != nil {
 		return Session{}, err
 	}
@@ -160,6 +248,27 @@ func (s *Service) AnswerQuestion(ctx context.Context, input AnswerQuestionInput)
 		return Session{}, err
 	}
 	return s.repository.GetSession(ctx, session.ID)
+}
+
+func (s *Service) applyResolvedAnswer(ctx context.Context, session *Session, questionID, answer string) error {
+	if strings.TrimSpace(questionID) == "" || strings.TrimSpace(answer) == "" {
+		return nil
+	}
+
+	question, err := s.repository.GetQuestion(ctx, session.ID, questionID)
+	if err != nil {
+		if err == ErrQuestionNotFound {
+			return nil
+		}
+		return err
+	}
+	question.Answer = strings.TrimSpace(answer)
+	question.AnsweredAt = time.Now().UTC()
+	if err := s.repository.UpsertQuestion(ctx, question); err != nil {
+		return err
+	}
+	session.History = append(session.History, newHistoryEntry("agent", "question_inferred_from_chat", "Captured an onboarding answer from the live chat for "+question.Category+"."))
+	return nil
 }
 
 func (s *Service) UpdateReviewMode(ctx context.Context, input UpdateReviewModeInput) (Session, error) {
@@ -503,6 +612,82 @@ func inferQuestions(session Session) []promptSpec {
 			promptSpec{Prompt: "Which connected account should the agent study first for historical learning?", Category: "account_scope", Required: true},
 			promptSpec{Prompt: "Should the agent preserve your current style closely, or deliberately improve and sharpen it?", Category: "improvement_mode", Required: true},
 		)
+	}
+	return items
+}
+
+func seedChatMessages(jobDescription, brandName string) []ChatMessage {
+	now := time.Now().UTC()
+	subject := firstNonEmpty(strings.TrimSpace(brandName), "your brand")
+	return []ChatMessage{
+		{
+			ID:        "chat-" + uuid.NewString(),
+			Role:      "assistant",
+			Content:   fmt.Sprintf("I’ve read the hiring brief for %s. I’m going to learn the brand, tighten the strategy, and only ask for details that materially improve execution.", subject),
+			CreatedAt: now,
+		},
+	}
+}
+
+func buildOnboardingSystemPrompt(session Session) string {
+	var pending []string
+	for _, question := range session.Questions {
+		if strings.TrimSpace(question.Answer) != "" {
+			continue
+		}
+		pending = append(pending, fmt.Sprintf("- %s | %s", question.ID, question.Prompt))
+	}
+
+	if len(pending) == 0 {
+		pending = append(pending, "- none; answer the user clearly and, if useful, explain what the agent will do next.")
+	}
+
+	return strings.TrimSpace(fmt.Sprintf(`
+You are Fedey, an AI social media manager being hired like a real employee.
+
+Your job in this chat:
+1. reply naturally, clearly, and helpfully like a strong GPT-style agent
+2. extract answers from the user's latest message only when the message actually answers one of the pending onboarding questions
+3. if the user asks a direct question, answer it well before steering back to missing onboarding details
+4. ask at most one next best follow-up question in your assistant_message
+5. never invent facts that the hirer did not provide
+
+Current onboarding context:
+- title: %s
+- brand: %s
+- account mode: %s
+- primary platform: %s
+- objective: %s
+- audience: %s
+- review mode: %s
+- voice summary: %s
+- constraints: %s
+- audit status: %s
+- connected platforms: %s
+- recent audit recommendations: %s
+
+Pending questions:
+%s
+
+Return strict JSON with:
+- assistant_message: string
+- resolved_answers: array of objects with question_id and answer
+
+Only include a resolved answer if the latest user message clearly answered that question.
+`, session.Title, firstNonEmpty(session.BrandName, session.Title), session.AccountMode, session.PrimaryPlatform, firstNonEmpty(session.Objective, "unspecified"), firstNonEmpty(session.Audience, "unspecified"), session.ReviewMode, firstNonEmpty(session.VoiceSummary, "unspecified"), strings.Join(session.Constraints, ", "), session.Audit.Status, strings.Join(session.Audit.ConnectedPlatforms, ", "), strings.Join(session.Audit.Recommendations, "; "), strings.Join(pending, "\n")))
+}
+
+func buildChatTranscript(session Session) []openai.Message {
+	items := make([]openai.Message, 0, len(session.ChatMessages)+1)
+	for _, message := range session.ChatMessages {
+		role := "assistant"
+		if message.Role == "user" {
+			role = "user"
+		}
+		items = append(items, openai.Message{
+			Role:    role,
+			Content: message.Content,
+		})
 	}
 	return items
 }

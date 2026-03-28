@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
     constraints TEXT[] NOT NULL DEFAULT '{}',
     review_mode TEXT NOT NULL DEFAULT 'auto',
     approval_status TEXT NOT NULL DEFAULT 'not_required',
+    chat_messages JSONB NOT NULL DEFAULT '[]'::jsonb,
     audit JSONB NOT NULL DEFAULT '{}'::jsonb,
     activation JSONB NOT NULL DEFAULT '{}'::jsonb,
     history JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS activation JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS review_mode TEXT NOT NULL DEFAULT 'auto';
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'not_required';
+ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS chat_messages JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE onboarding_sessions ADD COLUMN IF NOT EXISTS history JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS onboarding_questions (

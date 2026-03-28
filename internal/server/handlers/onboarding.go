@@ -67,6 +67,34 @@ func (h *OnboardingHandler) AnswerQuestion(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *OnboardingHandler) Chat(w http.ResponseWriter, r *http.Request) {
+	var request onboarding.ChatInput
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	request.SessionID = r.PathValue("id")
+
+	item, err := h.service.Chat(r.Context(), request)
+	if errors.Is(err, onboarding.ErrInvalidSessionInput) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrChatUnavailable) {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if errors.Is(err, onboarding.ErrSessionNotFound) {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to process onboarding chat")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (h *OnboardingHandler) RunAudit(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.RunAudit(r.Context(), r.PathValue("id"))
 	if errors.Is(err, onboarding.ErrInvalidSessionInput) {

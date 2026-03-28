@@ -26,6 +26,7 @@ type Session struct {
 	Constraints     []string       `json:"constraints"`
 	ReviewMode      string         `json:"reviewMode"`
 	ApprovalStatus  string         `json:"approvalStatus"`
+	ChatMessages    []ChatMessage  `json:"chatMessages"`
 	Questions       []Question     `json:"questions"`
 	Audit           AuditReport    `json:"audit"`
 	Activation      ActivationPlan `json:"activation"`
@@ -33,6 +34,13 @@ type Session struct {
 	Status          SessionStatus  `json:"status"`
 	CreatedAt       time.Time      `json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
+}
+
+type ChatMessage struct {
+	ID        string    `json:"id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Question struct {
@@ -109,6 +117,11 @@ type AnswerQuestionInput struct {
 	SessionID  string `json:"sessionId"`
 	QuestionID string `json:"questionId"`
 	Answer     string `json:"answer"`
+}
+
+type ChatInput struct {
+	SessionID string `json:"sessionId"`
+	Message   string `json:"message"`
 }
 
 type UpdateReviewModeInput struct {

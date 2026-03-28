@@ -20,7 +20,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, history, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, chat_messages, audit, activation, history, status, created_at, updated_at
 		FROM onboarding_sessions
 		ORDER BY created_at DESC
 	`
@@ -48,9 +48,13 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Session, error) {
 
 func (r *PostgresRepository) CreateSession(ctx context.Context, session Session) error {
 	const query = `
-		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, history, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		INSERT INTO onboarding_sessions (id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, chat_messages, audit, activation, history, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 	`
+	chatMessagesPayload, err := json.Marshal(session.ChatMessages)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding chat messages: %w", err)
+	}
 	auditPayload, err := json.Marshal(session.Audit)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding audit: %w", err)
@@ -63,7 +67,7 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding history: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, auditPayload, activationPayload, historyPayload, session.Status, session.CreatedAt, session.UpdatedAt)
+	_, err = r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, chatMessagesPayload, auditPayload, activationPayload, historyPayload, session.Status, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create onboarding session: %w", err)
 	}
@@ -73,9 +77,13 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session) error {
 	const query = `
 		UPDATE onboarding_sessions
-		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, review_mode=$11, approval_status=$12, audit=$13, activation=$14, history=$15, status=$16, updated_at=$17
+		SET title=$2, job_description=$3, account_mode=$4, objective=$5, primary_platform=$6, brand_name=$7, audience=$8, voice_summary=$9, constraints=$10, review_mode=$11, approval_status=$12, chat_messages=$13, audit=$14, activation=$15, history=$16, status=$17, updated_at=$18
 		WHERE id=$1
 	`
+	chatMessagesPayload, err := json.Marshal(session.ChatMessages)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding chat messages: %w", err)
+	}
 	auditPayload, err := json.Marshal(session.Audit)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding audit: %w", err)
@@ -88,7 +96,7 @@ func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session)
 	if err != nil {
 		return fmt.Errorf("marshal onboarding history: %w", err)
 	}
-	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, auditPayload, activationPayload, historyPayload, session.Status, session.UpdatedAt)
+	commandTag, err := r.pool.Exec(ctx, query, session.ID, session.Title, session.JobDescription, session.AccountMode, session.Objective, session.PrimaryPlatform, session.BrandName, session.Audience, session.VoiceSummary, session.Constraints, session.ReviewMode, session.ApprovalStatus, chatMessagesPayload, auditPayload, activationPayload, historyPayload, session.Status, session.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("update onboarding session: %w", err)
 	}
@@ -100,7 +108,7 @@ func (r *PostgresRepository) UpdateSession(ctx context.Context, session Session)
 
 func (r *PostgresRepository) GetSession(ctx context.Context, sessionID string) (Session, error) {
 	const query = `
-		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, audit, activation, history, status, created_at, updated_at
+		SELECT id, title, job_description, account_mode, objective, primary_platform, brand_name, audience, voice_summary, constraints, review_mode, approval_status, chat_messages, audit, activation, history, status, created_at, updated_at
 		FROM onboarding_sessions
 		WHERE id = $1
 	`
@@ -180,12 +188,18 @@ type sessionScanner interface {
 
 func scanSession(scanner sessionScanner) (Session, error) {
 	var session Session
+	var chatMessagesPayload []byte
 	var auditPayload []byte
 	var activationPayload []byte
 	var historyPayload []byte
-	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &session.ReviewMode, &session.ApprovalStatus, &auditPayload, &activationPayload, &historyPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
+	err := scanner.Scan(&session.ID, &session.Title, &session.JobDescription, &session.AccountMode, &session.Objective, &session.PrimaryPlatform, &session.BrandName, &session.Audience, &session.VoiceSummary, &session.Constraints, &session.ReviewMode, &session.ApprovalStatus, &chatMessagesPayload, &auditPayload, &activationPayload, &historyPayload, &session.Status, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
 		return Session{}, err
+	}
+	if len(chatMessagesPayload) > 0 {
+		if err := json.Unmarshal(chatMessagesPayload, &session.ChatMessages); err != nil {
+			return Session{}, fmt.Errorf("unmarshal onboarding chat messages: %w", err)
+		}
 	}
 	if len(auditPayload) > 0 {
 		if err := json.Unmarshal(auditPayload, &session.Audit); err != nil {
