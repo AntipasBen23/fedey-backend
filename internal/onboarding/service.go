@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/AntipasBen23/fedey-backend/internal/brandmemory"
+	"github.com/AntipasBen23/fedey-backend/internal/community"
 	"github.com/AntipasBen23/fedey-backend/internal/content"
 	"github.com/AntipasBen23/fedey-backend/internal/linkedinaccounts"
 	openai "github.com/AntipasBen23/fedey-backend/internal/llm/openai"
@@ -26,6 +27,7 @@ type Service struct {
 	contentService     *content.Service
 	performanceService *performance.Service
 	publishingService  *publishing.Service
+	communityService   *community.Service
 	activationWindows  []publishing.Window
 	xClient            *xplatform.Client
 	xAccountService    *xaccounts.Service
@@ -45,6 +47,7 @@ func NewService(
 	contentService *content.Service,
 	performanceService *performance.Service,
 	publishingService *publishing.Service,
+	communityService *community.Service,
 	activationWindows []publishing.Window,
 	xClient *xplatform.Client,
 	xAccountService *xaccounts.Service,
@@ -58,6 +61,7 @@ func NewService(
 		contentService:     contentService,
 		performanceService: performanceService,
 		publishingService:  publishingService,
+		communityService:   communityService,
 		activationWindows:  append([]publishing.Window(nil), activationWindows...),
 		xClient:            xClient,
 		xAccountService:    xAccountService,
@@ -151,11 +155,12 @@ func (s *Service) Chat(ctx context.Context, input ChatInput) (Session, error) {
 	}
 	session.ChatMessages = append(session.ChatMessages, userMessage)
 
-	resolution, err := s.chatResolver.ResolveOnboardingChat(
-		ctx,
-		buildOnboardingSystemPrompt(session),
-		buildChatTranscript(session),
-	)
+	prompt, err := s.buildAgentSystemPrompt(ctx, session)
+	if err != nil {
+		return Session{}, err
+	}
+
+	resolution, err := s.chatResolver.ResolveOnboardingChat(ctx, prompt, buildChatTranscript(session))
 	if err != nil {
 		return Session{}, err
 	}
@@ -629,7 +634,12 @@ func seedChatMessages(jobDescription, brandName string) []ChatMessage {
 	}
 }
 
-func buildOnboardingSystemPrompt(session Session) string {
+func (s *Service) buildAgentSystemPrompt(ctx context.Context, session Session) (string, error) {
+	liveContext, err := s.buildLiveContext(ctx)
+	if err != nil {
+		return "", err
+	}
+
 	var pending []string
 	for _, question := range session.Questions {
 		if strings.TrimSpace(question.Answer) != "" {
@@ -643,12 +653,12 @@ func buildOnboardingSystemPrompt(session Session) string {
 	}
 
 	return strings.TrimSpace(fmt.Sprintf(`
-You are Fedey, an AI social media manager being hired like a real employee.
+You are Fedey, an AI social media manager that can both onboard and operate live social accounts.
 
 Your job in this chat:
 1. reply naturally, clearly, and helpfully like a strong GPT-style agent
 2. extract answers from the user's latest message only when the message actually answers one of the pending onboarding questions
-3. if the user asks a direct question, answer it well before steering back to missing onboarding details
+3. if the user asks a direct question about live account management, answer it using the live operating context before steering back to missing onboarding details
 4. ask at most one next best follow-up question in your assistant_message
 5. never invent facts that the hirer did not provide
 
@@ -666,6 +676,9 @@ Current onboarding context:
 - connected platforms: %s
 - recent audit recommendations: %s
 
+Current live operating context:
+%s
+
 Pending questions:
 %s
 
@@ -674,7 +687,7 @@ Return strict JSON with:
 - resolved_answers: array of objects with question_id and answer
 
 Only include a resolved answer if the latest user message clearly answered that question.
-`, session.Title, firstNonEmpty(session.BrandName, session.Title), session.AccountMode, session.PrimaryPlatform, firstNonEmpty(session.Objective, "unspecified"), firstNonEmpty(session.Audience, "unspecified"), session.ReviewMode, firstNonEmpty(session.VoiceSummary, "unspecified"), strings.Join(session.Constraints, ", "), session.Audit.Status, strings.Join(session.Audit.ConnectedPlatforms, ", "), strings.Join(session.Audit.Recommendations, "; "), strings.Join(pending, "\n")))
+`, session.Title, firstNonEmpty(session.BrandName, session.Title), session.AccountMode, session.PrimaryPlatform, firstNonEmpty(session.Objective, "unspecified"), firstNonEmpty(session.Audience, "unspecified"), session.ReviewMode, firstNonEmpty(session.VoiceSummary, "unspecified"), strings.Join(session.Constraints, ", "), session.Audit.Status, strings.Join(session.Audit.ConnectedPlatforms, ", "), strings.Join(session.Audit.Recommendations, "; "), liveContext, strings.Join(pending, "\n"))), nil
 }
 
 func buildChatTranscript(session Session) []openai.Message {
@@ -690,6 +703,58 @@ func buildChatTranscript(session Session) []openai.Message {
 		})
 	}
 	return items
+}
+
+func (s *Service) buildLiveContext(ctx context.Context) (string, error) {
+	lines := []string{}
+
+	if s.brandMemoryService != nil {
+		profile, err := s.brandMemoryService.Get(ctx)
+		if err == nil {
+			lines = append(lines,
+				fmt.Sprintf("- brand memory tone: %s", profile.Tone),
+				fmt.Sprintf("- brand memory audience: %s", profile.Audience),
+				fmt.Sprintf("- brand memory pillars: %s", strings.Join(profile.Pillars, ", ")),
+			)
+		}
+	}
+
+	if s.publishingService != nil {
+		schedules, err := s.publishingService.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		next := firstUpcomingSchedule(schedules)
+		if next != nil {
+			lines = append(lines,
+				fmt.Sprintf("- next scheduled post: %s at %s", strings.ToUpper(next.Channel), next.ScheduledFor.UTC().Format(time.RFC3339)),
+				fmt.Sprintf("- next scheduled post status: %s", next.Status),
+			)
+		} else {
+			lines = append(lines, "- next scheduled post: none")
+		}
+		lines = append(lines, fmt.Sprintf("- total schedules tracked: %d", len(schedules)))
+	}
+
+	if s.communityService != nil {
+		items, err := s.communityService.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		pendingReplies := 0
+		for _, item := range items {
+			if item.Status != community.StatusReplied {
+				pendingReplies++
+			}
+		}
+		lines = append(lines, fmt.Sprintf("- replies waiting: %d", pendingReplies))
+	}
+
+	if len(lines) == 0 {
+		lines = append(lines, "- no live operating context available yet")
+	}
+
+	return strings.Join(lines, "\n"), nil
 }
 
 func allRequiredAnswered(questions []Question) bool {
@@ -1380,6 +1445,20 @@ func firstNonEmpty(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func firstUpcomingSchedule(schedules []publishing.Schedule) *publishing.Schedule {
+	var next *publishing.Schedule
+	now := time.Now().UTC()
+	for index := range schedules {
+		if schedules[index].ScheduledFor.IsZero() || schedules[index].ScheduledFor.Before(now) {
+			continue
+		}
+		if next == nil || schedules[index].ScheduledFor.Before(next.ScheduledFor) {
+			next = &schedules[index]
+		}
+	}
+	return next
 }
 
 func truncate(value string, limit int) string {

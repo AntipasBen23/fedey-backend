@@ -81,7 +81,7 @@ func main() {
 	publishingService := publishing.NewService(publishingRepository, contentService, experimentService, performanceService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService)
 	communityRepository := community.NewRepository(pool)
 	communityService := community.NewService(communityRepository, brandMemoryService, publishingService, xClient, xAccountService, linkedinClient, linkedinAccountService)
-	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, performanceService, publishingService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService, openAIClient)
+	onboardingService := onboarding.NewService(onboarding.NewRepository(pool), brandMemoryService, contentService, performanceService, publishingService, communityService, publishing.ParseWindows(cfg.PublishWindows()), xClient, xAccountService, linkedinClient, linkedinAccountService, openAIClient)
 	automationRepository := automation.NewRepository(pool)
 	automationService := automation.NewService(automationRepository, brandMemoryService, trendService, contentService, publishingService, communityService, performanceService, automation.Settings{
 		Interval: cfg.AutomationInterval(),
