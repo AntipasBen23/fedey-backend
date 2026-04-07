@@ -26,6 +26,7 @@ AllowCredentials: true,
 v1 := r.Group("/v1")
 {
 v1.POST("/analyze", handlers.AnalyzeHandler)
+v1.POST("/auth/callback", handlers.AuthCallbackHandler)
 }
 
 port := os.Getenv("PORT")
