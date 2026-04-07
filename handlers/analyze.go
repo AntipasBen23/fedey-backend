@@ -42,7 +42,7 @@ func AnalyzeHandler(c *gin.Context) {
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OPENAI_API_KEY is not configured"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Furci couldn't access her brain (API Key missing). Please check your backend configuration."})
 		return
 	}
 
