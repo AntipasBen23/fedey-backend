@@ -27,6 +27,9 @@ v1 := r.Group("/v1")
 {
 v1.POST("/analyze", handlers.AnalyzeHandler)
 v1.POST("/auth/callback", handlers.AuthCallbackHandler)
+v1.POST("/strategy", handlers.StrategyHandler)
+v1.POST("/calendar", handlers.CalendarHandler)
+v1.POST("/revise", handlers.ReviseHandler)
 }
 
 port := os.Getenv("PORT")
