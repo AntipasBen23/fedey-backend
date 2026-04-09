@@ -1,11 +1,7 @@
 package worker
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
