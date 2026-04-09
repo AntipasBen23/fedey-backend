@@ -20,7 +20,8 @@ func AuthCallbackHandler(c *gin.Context) {
 	}
 
 	// TODO: Save this token and account type to your database associated with the user.
-	// For now, we'll just acknowledge receipt.
+	// For now, we'll just acknowledge and log receipt.
+	fmt.Printf("TOKEN RECEIVED: Platform=%s, Type=%s, TokenLen=%d\n", req.Platform, req.AccountType, len(req.AccessToken))
 	
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Authentication successful. Furci now has access to your account.",
