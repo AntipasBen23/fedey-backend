@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/AntipasBen23/fedey-backend/database"
+	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,12 +22,28 @@ func AuthCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// TODO: Save this token and account type to your database associated with the user.
-	// For now, we'll just acknowledge and log receipt.
-	fmt.Printf("TOKEN RECEIVED: Platform=%s, Type=%s, TokenLen=%d\n", req.Platform, req.AccountType, len(req.AccessToken))
-	
+	// Persist to Database
+	if database.DB != nil {
+		account := models.SocialAccount{
+			Platform:    req.Platform,
+			AccessToken: req.AccessToken,
+			AccountType: req.AccountType,
+		}
+
+		// Upsert logic: if platform and accountType combo exists, update token. Else create.
+		result := database.DB.Where(models.SocialAccount{Platform: req.Platform, AccountType: req.AccountType}).
+			Assign(models.SocialAccount{AccessToken: req.AccessToken}).
+			FirstOrCreate(&account)
+
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save account info: " + result.Error.Error()})
+			return
+		}
+		fmt.Printf("TOKEN PERSISTED: Platform=%s, Type=%s\n", req.Platform, req.AccountType)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Authentication successful. Furci now has access to your account.",
+		"message": "Authentication successful. Furci now has access to your account (Persistent).",
 		"platform": req.Platform,
 	})
 }

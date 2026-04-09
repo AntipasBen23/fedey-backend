@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AntipasBen23/fedey-backend/database"
+	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -86,6 +88,16 @@ func CalendarHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse calendar: " + err.Error()})
 		return
+	}
+
+	// Persist to Database
+	if database.DB != nil {
+		contentJSON, _ := json.Marshal(calRes.Calendar)
+		dbCal := models.ContentCalendar{
+			ProductSummary: req.ProductSummary,
+			ContentJSON:    string(contentJSON),
+		}
+		database.DB.Create(&dbCal)
 	}
 
 	c.JSON(http.StatusOK, calRes)

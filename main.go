@@ -4,6 +4,7 @@ import (
 "log"
 "os"
 
+"github.com/AntipasBen23/fedey-backend/database"
 "github.com/AntipasBen23/fedey-backend/handlers"
 "github.com/gin-contrib/cors"
 "github.com/gin-gonic/gin"
@@ -12,6 +13,7 @@ import (
 
 func main() {
 _ = godotenv.Load()
+database.InitDB()
 
 r := gin.Default()
 
