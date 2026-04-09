@@ -15,8 +15,8 @@ import (
 )
 
 func fetchUserTweets(accessToken string) (string, error) {
-	// 1. Get User ID
-	req, _ := http.NewRequest("GET", "https://api.twitter.com/2/users/me", nil)
+	// 1. Get User Profile (including Bio)
+	req, _ := http.NewRequest("GET", "https://api.twitter.com/2/users/me?user.fields=description", nil)
 	req.Header.Add("Authorization", "Bearer "+accessToken)
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -27,39 +27,44 @@ func fetchUserTweets(accessToken string) (string, error) {
 
 	var userResp struct {
 		Data struct {
-			ID string `json:"id"`
+			ID          string `json:"id"`
+			Description string `json:"description"`
+			Name        string `json:"name"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
-		return "", err
-	}
+	bodyUser, _ := io.ReadAll(resp.Body)
+	json.Unmarshal(bodyUser, &userResp)
+	fmt.Printf("TWITTER USER DATA: Name=%s, Bio=%s\n", userResp.Data.Name, userResp.Data.Description)
 
 	// 2. Get Tweets
 	tweetURL := fmt.Sprintf("https://api.twitter.com/2/users/%s/tweets?max_results=5", userResp.Data.ID)
 	req, _ = http.NewRequest("GET", tweetURL, nil)
 	req.Header.Add("Authorization", "Bearer "+accessToken)
 	resp, err = client.Do(req)
-	if err != nil {
-		return "", err
+	
+	tweetSummary := fmt.Sprintf("USER PROFILE NAME: %s\nBIO/DESCRIPTION: %s\n\nRECENT POSTS:\n", userResp.Data.Name, userResp.Data.Description)
+	
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		var tweetResp struct {
+			Data []struct {
+				Text string `json:"text"`
+			} `json:"data"`
+		}
+		json.Unmarshal(body, &tweetResp)
+		
+		if len(tweetResp.Data) > 0 {
+			for i, t := range tweetResp.Data {
+				tweetSummary += fmt.Sprintf("%d. %s\n", i+1, t.Text)
+			}
+		} else {
+			tweetSummary += "(No recent posts found in the last 7 days)\n"
+		}
+	} else {
+		tweetSummary += "(Could not fetch posts: Access Denied or API Limit)\n"
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	var tweetResp struct {
-		Data []struct {
-			Text string `json:"text"`
-		} `json:"data"`
-	}
-	json.Unmarshal(body, &tweetResp)
-
-	tweetSummary := ""
-	for i, t := range tweetResp.Data {
-		tweetSummary += fmt.Sprintf("%d. %s\n", i+1, t.Text)
-	}
-
-	if tweetSummary == "" {
-		return "No recent tweets found.", nil
-	}
 	return tweetSummary, nil
 }
 
@@ -84,15 +89,15 @@ USER GOAL (The new product/career):
 
 %s
 
-Provide:
-1. **Identity Audit**: Based on the context above, summarize the "Identity Gap." If they are transitioning from one field (e.g. Engineering) to another (e.g. Healthcare), acknowledge it and suggest a "Clean Pivot" strategy as requested.
-2. **Trend Monitoring Tactics**: How to monitor industry trends for the NEW goal.
-3. **Growth Experiments**: 3 specific hypotheses to test for rapid growth in the NEW field.
-4. **Analytics Reporting**: Key metrics and reporting logic.
+STRICT INSTRUCTIONS FOR IDENTITY AUDIT:
+1. You MUST start the "identityAudit" by stating the user's Profile Name and Bio/Description if provided.
+2. Check the "RECENT POSTS" section. If it says "No recent posts found", acknowledge that you are basing your audit primarily on their Profile Bio.
+3. Identify the "Identity Gap" clearly. If they are a Software Engineer (per Bio) and want to do Healthcare (per User Goal), call it out. 
+4. Suggest a "Clean Pivot" strategy as requested. Do NOT make up facts about their background that aren't in the provided Bio or Posts.
 
 Format requirements: Return ONLY a valid JSON object matching this schema exactly:
 {
-  "identityAudit": "Summary text here...",
+  "identityAudit": "Based on your name [Name] and bio [Bio], I see you are a [Role]. Your last posts are about [Topics]. Since you want to move to [Goal], here is the pivot plan...",
   "trendMonitoring": ["tactic1", "tactic2"],
   "growthExperiments": ["experiment1", "experiment2"],
   "analyticsReporting": ["metric1", "metric2"]
