@@ -7,6 +7,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm/clause"
 )
 
 type AuthCallbackRequest struct {
@@ -27,33 +28,25 @@ func AuthCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// 1. Check if account already exists
-	var existing models.SocialAccount
-	err := database.DB.Where("platform = ? AND account_type = ?", req.Platform, req.AccountType).First(&existing).Error
-
-	if err == nil {
-		// Update existing
-		existing.AccessToken = req.AccessToken
-		if saveErr := database.DB.Save(&existing).Error; saveErr != nil {
-			fmt.Printf("[AUTH] Failed to update existing account: %v\n", saveErr)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account tokens"})
-			return
-		}
-		fmt.Printf("[AUTH] Token UPDATED for Platform=%s\n", req.Platform)
-	} else {
-		// Create new
-		newAccount := models.SocialAccount{
-			Platform:    req.Platform,
-			AccessToken: req.AccessToken,
-			AccountType: req.AccountType,
-		}
-		if createErr := database.DB.Create(&newAccount).Error; createErr != nil {
-			fmt.Printf("[AUTH] Failed to create new account: %v\n", createErr)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new account info"})
-			return
-		}
-		fmt.Printf("[AUTH] Token CREATED for Platform=%s\n", req.Platform)
+	// Use Atomic Upsert (On Conflict) to handle potential race conditions from double-clicks
+	account := models.SocialAccount{
+		Platform:    req.Platform,
+		AccessToken: req.AccessToken,
+		AccountType: req.AccountType,
 	}
+
+	err := database.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "platform"}, {Name: "account_type"}},
+		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at"}),
+	}).Create(&account).Error
+
+	if err != nil {
+		fmt.Printf("[AUTH] Upsert Error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync account credentials"})
+		return
+	}
+
+	fmt.Printf("[AUTH] Account synced successfully: Platform=%s, Type=%s\n", req.Platform, req.AccountType)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Authentication successful. Furci now has access to your account (Persistent).",
