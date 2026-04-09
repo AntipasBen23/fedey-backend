@@ -24,11 +24,22 @@ func DisconnectHandler(c *gin.Context) {
 		return
 	}
 
-	// Delete the social account record for the specified platform
-	result := database.DB.Where("platform = ?", req.Platform).Delete(&models.SocialAccount{})
-	
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disconnect account"})
+	// 1. Find the account first to get the ID and verify existence
+	var account models.SocialAccount
+	if err := database.DB.Where("platform = ?", req.Platform).First(&account).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found for " + req.Platform})
+		return
+	}
+
+	// 2. Wipe all scheduled posts for this account to ensure a clean slate
+	if err := database.DB.Where("account_id = ?", account.ID).Delete(&models.ScheduledPost{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to wipe scheduled posts"})
+		return
+	}
+
+	// 3. Finally, delete the social account (soft delete)
+	if err := database.DB.Delete(&account).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to wipe account tokens"})
 		return
 	}
 
