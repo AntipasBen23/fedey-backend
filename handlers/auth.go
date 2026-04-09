@@ -37,7 +37,7 @@ func AuthCallbackHandler(c *gin.Context) {
 
 	err := database.DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "platform"}, {Name: "account_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at", "deleted_at"}),
 	}).Create(&account).Error
 
 	if err != nil {
