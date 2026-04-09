@@ -90,14 +90,14 @@ USER GOAL (The new product/career):
 %s
 
 STRICT INSTRUCTIONS FOR IDENTITY AUDIT:
-1. You MUST start the "identityAudit" by stating the user's Profile Name and Bio/Description if provided.
-2. Check the "RECENT POSTS" section. If it says "No recent posts found", acknowledge that you are basing your audit primarily on their Profile Bio.
-3. Identify the "Identity Gap" clearly. If they are a Software Engineer (per Bio) and want to do Healthcare (per User Goal), call it out. 
-4. Suggest a "Clean Pivot" strategy as requested. Do NOT make up facts about their background that aren't in the provided Bio or Posts.
+1. Start by explicitly mentioning the User's Name and how many recent posts you analyzed (e.g., "I've analyzed your bio and [X] recent posts").
+2. Synthesize their "Current Identity" by mixing what is in their Bio and what they have actually been posting about recently. 
+3. Identify the "Identity Gap." If they are currently a [Old Identity] and want to move to [New Goal], call out the specific shift.
+4. Suggest a "Clean Pivot" strategy. 
 
 Format requirements: Return ONLY a valid JSON object matching this schema exactly:
 {
-  "identityAudit": "Based on your name [Name] and bio [Bio], I see you are a [Role]. Your last posts are about [Topics]. Since you want to move to [Goal], here is the pivot plan...",
+  "identityAudit": "I analyzed [Name]'s profile and [X] posts. Your bio says [Bio] and your posts focus on [Topics]. To move towards [Goal], I recommend this pivot...",
   "trendMonitoring": ["tactic1", "tactic2"],
   "growthExperiments": ["experiment1", "experiment2"],
   "analyticsReporting": ["metric1", "metric2"]
