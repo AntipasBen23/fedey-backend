@@ -5,8 +5,9 @@ import (
 "os"
 
 "github.com/AntipasBen23/fedey-backend/database"
-"github.com/AntipasBen23/fedey-backend/handlers"
-"github.com/gin-contrib/cors"
+	"github.com/AntipasBen23/fedey-backend/handlers"
+	"github.com/AntipasBen23/fedey-backend/worker"
+	"github.com/gin-contrib/cors"
 "github.com/gin-gonic/gin"
 "github.com/joho/godotenv"
 )
@@ -14,6 +15,7 @@ import (
 func main() {
 _ = godotenv.Load()
 database.InitDB()
+worker.StartScheduler()
 
 r := gin.Default()
 

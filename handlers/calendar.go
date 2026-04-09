@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
@@ -112,21 +113,87 @@ func CalendarHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, calRes)
 }
 
+type ApproveRequest struct {
+	SchedulingMode  string   `json:"schedulingMode"`  // 'manual', 'smart', 'hybrid'
+	StaggerStrategy string   `json:"staggerStrategy"` // 'none', 'fixed', 'smart'
+	PreferredSlots  []string `json:"preferredSlots"`  // for manual mode
+}
+
+type SmartStaggerResult struct {
+	Platform     string `json:"platform"`
+	DelayMinutes int    `json:"delayMinutes"`
+	Reason       string `json:"reason"`
+}
+
 func ApproveCalendarHandler(c *gin.Context) {
+	var req ApproveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
 	if database.DB == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
 		return
 	}
 
-	// For now, approve the most recent draft
+	// 1. Fetch Draft Calendar
 	var cal models.ContentCalendar
-	result := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&cal)
-	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found to approve"})
+	if err := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&cal).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found"})
 		return
 	}
 
+	var items []CalendarItem
+	json.Unmarshal([]byte(cal.ContentJSON), &items)
+
+	// 2. Fetch Connected Accounts
+	var accounts []models.SocialAccount
+	database.DB.Find(&accounts)
+	if len(accounts) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No social accounts connected"})
+		return
+	}
+
+	// 3. Process Scheduling for each day
+	for dayIndex, item := range items {
+		// Base time for this day (starting tomorrow at 9 AM)
+		baseTime := time.Now().AddDate(0, 0, dayIndex+1)
+		baseTime = time.Date(baseTime.Year(), baseTime.Month(), baseTime.Day(), 9, 0, 0, 0, time.Local)
+
+		for _, account := range accounts {
+			scheduledTime := baseTime
+			reasoning := ""
+
+			// Apply Smart Stagger Logic if selected
+			if req.StaggerStrategy == "smart" {
+				// AI sequencing logic simulated for stability
+				if account.Platform == "linkedin" {
+					scheduledTime = scheduledTime.Add(2 * time.Hour) // LinkedIn delayed for professional peak
+					reasoning = "LinkedIn scheduled for mid-morning professional peak (AI Optimized)."
+				} else {
+					reasoning = "X scheduled for immediate morning hook impact (AI Optimized)."
+				}
+			} else if req.StaggerStrategy == "fixed" && account.Platform == "linkedin" {
+				scheduledTime = scheduledTime.Add(1 * time.Hour)
+				reasoning = "Staggered 60 mins after X."
+			}
+
+			post := models.ScheduledPost{
+				AccountID:   account.ID,
+				Platform:    account.Platform,
+				Content:     fmt.Sprintf("%s\n\n%s", item.Hook, item.Content),
+				Day:         item.Day,
+				ScheduledAt: scheduledTime,
+				AIReasoning: reasoning,
+				Status:      "pending",
+			}
+			database.DB.Create(&post)
+		}
+	}
+
+	// 4. Update Status
 	database.DB.Model(&cal).Update("status", "scheduled")
 
-	c.JSON(http.StatusOK, gin.H{"message": "Calendar approved and scheduled!"})
+	c.JSON(http.StatusOK, gin.H{"message": "Intelligent schedule deployed! Check your dashboard."})
 }

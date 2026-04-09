@@ -24,7 +24,12 @@ func InitDB() {
 	}
 
 	// Auto-Migrate the schemas
-	err = db.AutoMigrate(&models.SocialAccount{}, &models.ContentCalendar{})
+	err = db.AutoMigrate(
+		&models.SocialAccount{}, 
+		&models.ContentCalendar{},
+		&models.UserStrategy{},
+		&models.ScheduledPost{},
+	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database: %v", err)
 	}
