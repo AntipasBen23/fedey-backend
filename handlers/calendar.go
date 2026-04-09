@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -128,7 +129,8 @@ type SmartStaggerResult struct {
 func ApproveCalendarHandler(c *gin.Context) {
 	var req ApproveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		log.Printf("[Approve] JSON Bind Error: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload: " + err.Error()})
 		return
 	}
 
@@ -140,18 +142,24 @@ func ApproveCalendarHandler(c *gin.Context) {
 	// 1. Fetch Draft Calendar
 	var cal models.ContentCalendar
 	if err := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&cal).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found"})
+		log.Printf("[Approve] Draft Fetch Error: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found to approve"})
 		return
 	}
 
 	var items []CalendarItem
-	json.Unmarshal([]byte(cal.ContentJSON), &items)
+	if err := json.Unmarshal([]byte(cal.ContentJSON), &items); err != nil {
+		log.Printf("[Approve] JSON Unmarshal Error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse calendar content"})
+		return
+	}
 
 	// 2. Fetch Connected Accounts
 	var accounts []models.SocialAccount
 	database.DB.Find(&accounts)
 	if len(accounts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No social accounts connected"})
+		log.Printf("[Approve] No accounts found in DB")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No social accounts connected. Please connect X or LinkedIn first."})
 		return
 	}
 
