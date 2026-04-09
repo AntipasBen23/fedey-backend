@@ -15,15 +15,16 @@ type RefineRequest struct {
 	CurrentStrategy ProfessionalStrategy `json:"currentStrategy"`
 	Feedback        string               `json:"feedback"`
 	ProductSummary  string               `json:"productSummary"`
+	RefineMode      string               `json:"refineMode"` // "merge" or "replace"
 }
 
 const refinePromptTemplate = `You are Furci AI. The user is dissatisfied with the social media strategy you generated.
-Your task is to REHAPE and IMPROVE the strategy based strictly on their feedback.
+Your task is to REHAPE and IMPROVE the strategy based strictly on their feedback and their chosen Refine Mode ("%s").
 
 USER GOAL:
 %s
 
-CURRENT STRATEGY:
+CURRENT STRATEGY (To be potentially merged or replaced):
 - Identity Audit: %s
 - Trend Monitoring: %v
 - Growth Experiments: %v
@@ -32,10 +33,10 @@ CURRENT STRATEGY:
 USER COMPLAINT/FEEDBACK:
 "%s"
 
-INSTRUCTIONS:
-1. Maintain the Identity Audit from the current strategy (unless the feedback specifically asks to change it).
-2. Completely rewrite the Trend Monitoring, Growth Experiments, and Analytics logic to specifically address the user's dissatisfaction.
-3. Make the tone even more professional and actionable.
+INSTRUCTIONS FOR MODE "%s":
+- If mode is "replace": Discard all current Trends, Experiments, and Analytics logic. Create a 100%% fresh strategy based ONLY on the User Goal and the Feedback.
+- If mode is "merge": Keep the winning ideas from the Current Strategy but mix in the new Feedback to create a blended, improved version.
+- In both modes, maintain the original Identity Audit.
 
 Format requirements: Return ONLY a valid JSON object matching the ProfessionalStrategy schema.
 `
@@ -55,12 +56,14 @@ func StrategyRefineHandler(c *gin.Context) {
 
 	client := openai.NewClient(apiKey)
 	prompt := fmt.Sprintf(refinePromptTemplate, 
+		req.RefineMode,
 		req.ProductSummary, 
 		req.CurrentStrategy.IdentityAudit, 
 		req.CurrentStrategy.TrendMonitoring, 
 		req.CurrentStrategy.GrowthExperiments, 
 		req.CurrentStrategy.AnalyticsReporting, 
 		req.Feedback,
+		req.RefineMode,
 	)
 
 	resp, err := client.CreateChatCompletion(
