@@ -40,10 +40,26 @@ type ScheduledPost struct {
 	Day         int            `json:"day"`
 	ScheduledAt time.Time      `json:"scheduledAt"`
 	Status      string         `gorm:"default:'pending'" json:"status"` // 'pending', 'posted', 'failed'
+	ExternalID  string         `json:"externalId"` // The ID from X/LinkedIn after posting
 	AIReasoning string         `json:"aiReasoning"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// PostAnalytics stores engagement data for a specific post
+type PostAnalytics struct {
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	ScheduledPostID uint           `gorm:"index" json:"scheduledPostId"`
+	Likes           int            `json:"likes"`
+	Reposts         int            `json:"reposts"`
+	Impressions     int            `json:"impressions"`
+	EngagementRate  float64        `json:"engagementRate"`
+	ImpactScore     int            `json:"impactScore"` // 1-100 calculated by AI
+	SyncTime        time.Time      `json:"syncTime"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // UserStrategy stores the active growth strategy

@@ -39,7 +39,16 @@ v1.POST("/calendar/approve", handlers.ApproveCalendarHandler)
 v1.GET("/dashboard", handlers.GetDashboardHandler)
 v1.POST("/settings/autopilot", handlers.ToggleAutoPilotHandler)
 v1.POST("/revise", handlers.ReviseHandler)
-}
+
+		// Trends & Social Listening
+		v1.GET("/trends", handlers.GetTrendsHandler)
+		v1.POST("/trends/react", handlers.ReactToTrendHandler)
+		v1.POST("/trends/react/schedule", handlers.ScheduleReactionHandler)
+
+		// Analytics
+		v1.GET("/analytics", handlers.GetAnalyticsHandler)
+		v1.POST("/analytics/sync", handlers.SyncAnalyticsHandler)
+	}
 
 port := os.Getenv("PORT")
 if port == "" {
