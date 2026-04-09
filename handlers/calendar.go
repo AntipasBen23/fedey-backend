@@ -28,7 +28,7 @@ type CalendarResponse struct {
 	Calendar []CalendarItem `json:"calendar"`
 }
 
-const calendarPromptTemplate = `Create a professional 14-day social media content calendar for the following product. 
+const calendarPromptTemplate = `Create a professional %d-day social media content calendar for the following product. 
 
 For each day, provide:
 1. Hook: A catchy opening line.
@@ -60,7 +60,15 @@ func CalendarHandler(c *gin.Context) {
 	}
 
 	client := openai.NewClient(apiKey)
-	prompt := fmt.Sprintf(calendarPromptTemplate, req.ProductSummary)
+	
+	// Trial Logic: Default to 3 days for now
+	isPremium := false // Placeholder for future subscription check
+	days := 3
+	if isPremium {
+		days = 14
+	}
+
+	prompt := fmt.Sprintf(calendarPromptTemplate, days, req.ProductSummary)
 
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
@@ -90,15 +98,35 @@ func CalendarHandler(c *gin.Context) {
 		return
 	}
 
-	// Persist to Database
+	// Persist to Database as Draft
 	if database.DB != nil {
 		contentJSON, _ := json.Marshal(calRes.Calendar)
 		dbCal := models.ContentCalendar{
 			ProductSummary: req.ProductSummary,
 			ContentJSON:    string(contentJSON),
+			Status:         "draft",
+			DayCount:       days,
 		}
 		database.DB.Create(&dbCal)
 	}
-
 	c.JSON(http.StatusOK, calRes)
+}
+
+func ApproveCalendarHandler(c *gin.Context) {
+	if database.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		return
+	}
+
+	// For now, approve the most recent draft
+	var cal models.ContentCalendar
+	result := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&cal)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found to approve"})
+		return
+	}
+
+	database.DB.Model(&cal).Update("status", "scheduled")
+
+	c.JSON(http.StatusOK, gin.H{"message": "Calendar approved and scheduled!"})
 }

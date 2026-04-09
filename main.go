@@ -33,6 +33,9 @@ v1.DELETE("/auth/disconnect", handlers.DisconnectHandler)
 v1.POST("/strategy", handlers.StrategyHandler)
 v1.POST("/strategy/refine", handlers.StrategyRefineHandler)
 v1.POST("/calendar", handlers.CalendarHandler)
+v1.POST("/calendar/approve", handlers.ApproveCalendarHandler)
+v1.GET("/dashboard", handlers.GetDashboardHandler)
+v1.POST("/settings/autopilot", handlers.ToggleAutoPilotHandler)
 v1.POST("/revise", handlers.ReviseHandler)
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
+	"gorm.io/gorm"
 )
 
 func fetchUserTweets(accessToken string) (string, error) {
@@ -160,6 +161,23 @@ func StrategyHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse strategy response: " + err.Error()})
 		return
+	}
+
+	// Persist Strategy to DB
+	if database.DB != nil {
+		trendsJSON, _ := json.Marshal(strategy.TrendMonitoring)
+		expsJSON, _ := json.Marshal(strategy.GrowthExperiments)
+		analyticsJSON, _ := json.Marshal(strategy.AnalyticsReporting)
+
+		userStrat := models.UserStrategy{
+			IdentityAudit:      strategy.IdentityAudit,
+			TrendMonitoring:    string(trendsJSON),
+			GrowthExperiments:  string(expsJSON),
+			AnalyticsReporting: string(analyticsJSON),
+		}
+		// Overwrite any existing strategy (Furci has one active brain)
+		database.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.UserStrategy{})
+		database.DB.Create(&userStrat)
 	}
 
 	c.JSON(http.StatusOK, strategy)
