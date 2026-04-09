@@ -22,24 +22,37 @@ func AuthCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Persist to Database
-	if database.DB != nil {
-		account := models.SocialAccount{
+	if database.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		return
+	}
+
+	// 1. Check if account already exists
+	var existing models.SocialAccount
+	err := database.DB.Where("platform = ? AND account_type = ?", req.Platform, req.AccountType).First(&existing).Error
+
+	if err == nil {
+		// Update existing
+		existing.AccessToken = req.AccessToken
+		if saveErr := database.DB.Save(&existing).Error; saveErr != nil {
+			fmt.Printf("[AUTH] Failed to update existing account: %v\n", saveErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account tokens"})
+			return
+		}
+		fmt.Printf("[AUTH] Token UPDATED for Platform=%s\n", req.Platform)
+	} else {
+		// Create new
+		newAccount := models.SocialAccount{
 			Platform:    req.Platform,
 			AccessToken: req.AccessToken,
 			AccountType: req.AccountType,
 		}
-
-		// Upsert logic: if platform and accountType combo exists, update token. Else create.
-		result := database.DB.Where(models.SocialAccount{Platform: req.Platform, AccountType: req.AccountType}).
-			Assign(models.SocialAccount{AccessToken: req.AccessToken}).
-			FirstOrCreate(&account)
-
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save account info: " + result.Error.Error()})
+		if createErr := database.DB.Create(&newAccount).Error; createErr != nil {
+			fmt.Printf("[AUTH] Failed to create new account: %v\n", createErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new account info"})
 			return
 		}
-		fmt.Printf("TOKEN PERSISTED: Platform=%s, Type=%s\n", req.Platform, req.AccountType)
+		fmt.Printf("[AUTH] Token CREATED for Platform=%s\n", req.Platform)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
