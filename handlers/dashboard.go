@@ -1,8 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
-	"net/http"
+		"net/http"
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
@@ -10,7 +9,7 @@ import (
 )
 
 type DashboardData struct {
-	Calendar       []CalendarItem         `json:"calendar"`
+	Calendar       []models.ScheduledPost `json:"calendar"`
 	SocialAccounts []models.SocialAccount `json:"socialAccounts"`
 	Strategy       *models.UserStrategy   `json:"strategy"`
 	Stats          map[string]interface{} `json:"stats"`
@@ -22,13 +21,11 @@ func GetDashboardHandler(c *gin.Context) {
 		return
 	}
 
-	// 1. Fetch Scheduled Content
-	var cal models.ContentCalendar
-	result := database.DB.Where("status = ?", "scheduled").Order("created_at desc").First(&cal)
-	
-	var calendarItems []CalendarItem
-	if result.Error == nil {
-		json.Unmarshal([]byte(cal.ContentJSON), &calendarItems)
+	// 1. Fetch Scheduled Content from discrete posts table
+	var scheduledPosts []models.ScheduledPost
+	result := database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Find(&scheduledPosts)
+	if result.Error != nil {
+		scheduledPosts = []models.ScheduledPost{}
 	}
 
 	// 2. Fetch Connected Social Accounts
@@ -41,13 +38,13 @@ func GetDashboardHandler(c *gin.Context) {
 
 	// 4. Prepare Mock Stats
 	stats := map[string]interface{}{
-		"totalPosts":    len(calendarItems),
+		"totalPosts":    len(scheduledPosts),
 		"activeExperiments": 3,
 		"impactScore":   "92%",
 	}
 
 	c.JSON(http.StatusOK, DashboardData{
-		Calendar:       calendarItems,
+		Calendar:       scheduledPosts,
 		SocialAccounts: accounts,
 		Strategy:       &strategy,
 		Stats:          stats,
