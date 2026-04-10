@@ -37,11 +37,16 @@ func GetTrendsHandler(c *gin.Context) {
 	client := openai.NewClient(apiKey)
 
 	prompt := fmt.Sprintf(`
-		You are a social media trend analyst. 
+		You are a world-class social media trend analyst. 
 		Based on this user's brand identity: "%s", 
-		list 3 highly relevant and "viral" trending topics happening RIGHT NOW on X (Twitter).
-		Return the response as a valid JSON array of objects with keys: "topic", "engagement", "description".
-		Ensure the topics are specific (e.g., "OpenAI's Sora update" instead of just "AI").
+		list 10 highly relevant, "viral", or "insightful" trending topics happening RIGHT NOW on X (Twitter).
+		Return the response as a valid JSON object with a "trends" key containing an array of objects.
+		Each object MUST have:
+		- "topic": Short, catchy topic name.
+		- "engagement": One of ["Explosive", "High", "Growing", "Insightful"].
+		- "description": 1-2 sentences explaining why this is trending and the unique angle.
+		
+		Ensure the topics are specific and professional.
 	`, strategy.IdentityAudit)
 
 	resp, err := client.CreateChatCompletion(
