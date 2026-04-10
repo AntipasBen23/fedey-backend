@@ -48,6 +48,10 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Analytics
 		v1.GET("/analytics", handlers.GetAnalyticsHandler)
 		v1.POST("/analytics/sync", handlers.SyncAnalyticsHandler)
+
+		// Posts Management
+		v1.PUT("/posts/:id", handlers.UpdatePostHandler)
+		v1.DELETE("/posts/:id", handlers.DeletePostHandler)
 	}
 
 port := os.Getenv("PORT")

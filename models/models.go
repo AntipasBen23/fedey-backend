@@ -69,7 +69,19 @@ type UserStrategy struct {
 	TrendMonitoring    string         `json:"trendMonitoring"` // JSON string
 	GrowthExperiments  string         `json:"growthExperiments"` // JSON string
 	AnalyticsReporting string         `json:"analyticsReporting"` // JSON string
+	PreferredStartHour int            `gorm:"default:9" json:"preferredStartHour"`
+	PreferredStagger   string         `gorm:"default:'smart'" json:"preferredStagger"`
+	PreferredMode      string         `gorm:"default:'smart'" json:"preferredMode"`
+	SaveAsDefault      bool           `gorm:"default:false" json:"saveAsDefault"`
 	CreatedAt          time.Time      `json:"createdAt"`
 	UpdatedAt          time.Time      `json:"updatedAt"`
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type UserPreferences struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	Config    string         `json:"config"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }

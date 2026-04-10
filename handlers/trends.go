@@ -46,19 +46,36 @@ func GetTrendsHandler(c *gin.Context) {
 			Messages: []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleUser, Content: prompt},
 			},
-			ResponseFormat: &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONSchema},
+			ResponseFormat: &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONObject},
 		},
 	)
 
 	if err != nil {
+		fmt.Printf("[TRENDS] API ERROR: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to listen for trends"})
 		return
 	}
 
-	var trends []TrendingTopic
-	json.Unmarshal([]byte(resp.Choices[0].Message.Content), &trends)
+	content := resp.Choices[0].Message.Content
+	fmt.Printf("[TRENDS] RAW RESP: %s\n", content)
 
-	c.JSON(http.StatusOK, gin.H{"trends": trends})
+	// Flexible parsing: The AI might return {"trends": [...]} or just [...]
+	type TrendWrapper struct {
+		Trends []TrendingTopic `json:"trends"`
+	}
+	var wrapper TrendWrapper
+	if jsonErr := json.Unmarshal([]byte(content), &wrapper); jsonErr != nil {
+		// Try unmarshaling directly as array
+		var direct []TrendingTopic
+		if jsonErr2 := json.Unmarshal([]byte(content), &direct); jsonErr2 != nil {
+			fmt.Printf("[TRENDS] PARSE ERROR: %v\n", jsonErr2)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse trends data"})
+			return
+		}
+		wrapper.Trends = direct
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trends": wrapper.Trends})
 }
 
 type ReactRequest struct {

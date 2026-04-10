@@ -31,17 +31,21 @@ func DisconnectHandler(c *gin.Context) {
 		return
 	}
 
-	// 2. Wipe all scheduled posts for this account to ensure a clean slate
-	if err := database.DB.Where("account_id = ?", account.ID).Delete(&models.ScheduledPost{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to wipe scheduled posts"})
-		return
-	}
+	// 2. Wipe ALL related data for this account to ensures a 100% clean slate
+	// Delete Scheduled Posts
+	database.DB.Where("account_id = ?", account.ID).Delete(&models.ScheduledPost{})
+	
+	// Delete platform-specific Analytics (to prevent legacy data from polluting the new connection)
+	database.DB.Where("scheduled_post_id IN (SELECT id FROM scheduled_posts WHERE account_id = ?)", account.ID).Delete(&models.PostAnalytics{})
 
 	// 3. Finally, delete the social account (soft delete)
 	if err := database.DB.Delete(&account).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to wipe account tokens"})
 		return
 	}
+
+	// 4. Wipe ALL Draft Calendars (since calendars are generated based on the specific connection state)
+	database.DB.Where("status = ?", "draft").Delete(&models.ContentCalendar{})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Successfully disconnected from " + req.Platform + ". Your tokens have been wiped.",

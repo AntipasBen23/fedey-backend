@@ -118,6 +118,8 @@ type ApproveRequest struct {
 	SchedulingMode  string   `json:"schedulingMode"`  // 'manual', 'smart', 'hybrid'
 	StaggerStrategy string   `json:"staggerStrategy"` // 'none', 'fixed', 'smart'
 	PreferredSlots  []string `json:"preferredSlots"`  // for manual mode
+	StartHour       int      `json:"startHour"`
+	SaveAsDefault   bool     `json:"saveAsDefault"`
 }
 
 type SmartStaggerResult struct {
@@ -163,28 +165,55 @@ func ApproveCalendarHandler(c *gin.Context) {
 		return
 	}
 
-	// 3. Process Scheduling for each day
+	// 3. Update User Preferences if SaveAsDefault is requested
+	if req.SaveAsDefault {
+		database.DB.Model(&models.UserStrategy{}).Where("1=1").Updates(map[string]interface{}{
+			"preferred_start_hour": req.StartHour,
+			"preferred_stagger":    req.StaggerStrategy,
+			"preferred_mode":       req.SchedulingMode,
+		})
+	}
+
+	// 4. Process Scheduling for each day
+	startHour := req.StartHour
+	if startHour == 0 {
+		// Fallback to strategy default if not passed
+		var strategy models.UserStrategy
+		database.DB.Order("created_at desc").First(&strategy)
+		startHour = strategy.PreferredStartHour
+	}
+	if startHour == 0 {
+		startHour = 9
+	}
+
 	for dayIndex, item := range items {
-		// Base time for this day (starting tomorrow at 9 AM)
-		baseTime := time.Now().AddDate(0, 0, dayIndex+1)
-		baseTime = time.Date(baseTime.Year(), baseTime.Month(), baseTime.Day(), 9, 0, 0, 0, time.Local)
+		// Calculate the correct day based on item.Day or dayIndex
+		offset := item.Day
+		if offset == 0 {
+			offset = dayIndex + 1
+		}
+
+		// Base time for this day (starting from 'offset' days from now)
+		baseTime := time.Now().AddDate(0, 0, offset)
+		baseTime = time.Date(baseTime.Year(), baseTime.Month(), baseTime.Day(), startHour, 0, 0, 0, time.Local)
 
 		for _, account := range accounts {
 			scheduledTime := baseTime
 			reasoning := ""
 
-			// Apply Smart Stagger Logic if selected
+			// Apply Scheduling Logic
 			if req.StaggerStrategy == "smart" {
-				// AI sequencing logic simulated for stability
 				if account.Platform == "linkedin" {
-					scheduledTime = scheduledTime.Add(2 * time.Hour) // LinkedIn delayed for professional peak
-					reasoning = "LinkedIn scheduled for mid-morning professional peak (AI Optimized)."
+					scheduledTime = scheduledTime.Add(2 * time.Hour) 
+					reasoning = "LinkedIn optimized for mid-morning professional peak."
 				} else {
-					reasoning = "X scheduled for immediate morning hook impact (AI Optimized)."
+					reasoning = "X optimized for maximal morning reach."
 				}
 			} else if req.StaggerStrategy == "fixed" && account.Platform == "linkedin" {
 				scheduledTime = scheduledTime.Add(1 * time.Hour)
-				reasoning = "Staggered 60 mins after X."
+				reasoning = "Staggered for cross-platform distribution."
+			} else {
+				reasoning = "Scheduled via user precision mode."
 			}
 
 			post := models.ScheduledPost{
