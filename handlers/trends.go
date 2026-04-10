@@ -20,6 +20,11 @@ type TrendingTopic struct {
 	Description string `json:"description"`
 }
 
+type TrendWrapper struct {
+	Trends []TrendingTopic `json:"trends"`
+	Topics []TrendingTopic `json:"topics"`
+}
+
 func GetTrendsHandler(c *gin.Context) {
 	// 1. Fetch user strategy for context
 	var strategy models.UserStrategy
@@ -59,23 +64,27 @@ func GetTrendsHandler(c *gin.Context) {
 	content := resp.Choices[0].Message.Content
 	fmt.Printf("[TRENDS] RAW RESP: %s\n", content)
 
-	// Flexible parsing: The AI might return {"trends": [...]} or just [...]
-	type TrendWrapper struct {
-		Trends []TrendingTopic `json:"trends"`
-	}
 	var wrapper TrendWrapper
-	if jsonErr := json.Unmarshal([]byte(content), &wrapper); jsonErr != nil {
-		// Try unmarshaling directly as array
-		var direct []TrendingTopic
-		if jsonErr2 := json.Unmarshal([]byte(content), &direct); jsonErr2 != nil {
-			fmt.Printf("[TRENDS] PARSE ERROR: %v\n", jsonErr2)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse trends data"})
-			return
+	result := []TrendingTopic{}
+
+	if jsonErr := json.Unmarshal([]byte(content), &wrapper); jsonErr == nil {
+		if len(wrapper.Trends) > 0 {
+			result = wrapper.Trends
+		} else if len(wrapper.Topics) > 0 {
+			result = wrapper.Topics
 		}
-		wrapper.Trends = direct
+	} else {
+		// Try unmarshaling directly as array
+		if jsonErr2 := json.Unmarshal([]byte(content), &result); jsonErr2 != nil {
+			fmt.Printf("[TRENDS] PARSE ERROR: %v\n", jsonErr2)
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"trends": wrapper.Trends})
+	if result == nil {
+		result = []TrendingTopic{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trends": result})
 }
 
 type ReactRequest struct {
