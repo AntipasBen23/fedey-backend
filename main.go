@@ -52,6 +52,9 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Posts Management
 		v1.PUT("/posts/:id", handlers.UpdatePostHandler)
 		v1.DELETE("/posts/:id", handlers.DeletePostHandler)
+
+		// Conversational AI
+		v1.POST("/chat", handlers.ChatWithFurciHandler)
 	}
 
 port := os.Getenv("PORT")
