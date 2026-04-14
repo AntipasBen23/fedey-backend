@@ -33,18 +33,25 @@ type ContentCalendar struct {
 
 // ScheduledPost represents a discrete posting event for the background worker
 type ScheduledPost struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	AccountID   uint           `json:"accountId"`
-	Platform    string         `json:"platform"`
-	Content     string         `json:"content"`
-	Day         int            `json:"day"`
-	ScheduledAt time.Time      `json:"scheduledAt"`
-	Status      string         `gorm:"default:'pending'" json:"status"` // 'pending', 'posted', 'failed'
-	ExternalID  string         `json:"externalId"` // The ID from X/LinkedIn after posting
-	AIReasoning string         `json:"aiReasoning"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID            uint           `gorm:"primaryKey" json:"id"`
+	AccountID     uint           `json:"accountId"`
+	Platform      string         `json:"platform"`
+	Content       string         `json:"content"`
+	ContentType   string         `json:"contentType"`   // tweet|thread|carousel|video_script|linkedin_post
+	Script        string         `json:"script"`         // Full script (thread tweets or video scene script)
+	SlidesJSON    string         `json:"slidesJson"`     // JSON array of carousel slide copy strings
+	ImageURLsJSON string         `json:"imageUrlsJson"`  // JSON array of DALL-E generated image URLs
+	VideoURL      string         `json:"videoUrl"`       // Runway ML generated video URL
+	Hashtags      string         `json:"hashtags"`       // Space-separated hashtags
+	CTAText       string         `json:"ctaText"`
+	Day           int            `json:"day"`
+	ScheduledAt   time.Time      `json:"scheduledAt"`
+	Status        string         `gorm:"default:'pending'" json:"status"` // 'pending', 'posted', 'failed'
+	ExternalID    string         `json:"externalId"` // The ID from X/LinkedIn after posting
+	AIReasoning   string         `json:"aiReasoning"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // PostAnalytics stores engagement data for a specific post

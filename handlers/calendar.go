@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
@@ -107,7 +108,7 @@ func CalendarHandler(c *gin.Context) {
 
 	prompt := fmt.Sprintf(calendarPromptTemplate, days, req.ProductSummary)
 
-	model := openai.GPT4o
+	model := openai.GPT4oMini
 	if envModel := os.Getenv("OPENAI_MODEL"); envModel != "" {
 		model = envModel
 	}
@@ -256,16 +257,34 @@ func ApproveCalendarHandler(c *gin.Context) {
 				reasoning = "Scheduled via user precision mode."
 			}
 
-			post := models.ScheduledPost{
-				AccountID:   account.ID,
-				Platform:    account.Platform,
-				Content:     fmt.Sprintf("%s\n\n%s", item.Hook, item.Content),
-				Day:         item.Day,
-				ScheduledAt: scheduledTime,
-				AIReasoning: reasoning,
-				Status:      "pending",
-			}
-			database.DB.Create(&post)
+			// Build publish-ready content with hashtags appended
+				publishContent := item.Content
+				if publishContent == "" {
+					publishContent = item.Hook
+				} else {
+					publishContent = fmt.Sprintf("%s\n\n%s", item.Hook, publishContent)
+				}
+				if len(item.Hashtags) > 0 {
+					publishContent += "\n\n" + strings.Join(item.Hashtags, " ")
+				}
+
+				slidesJSON, _ := json.Marshal(item.Slides)
+
+				post := models.ScheduledPost{
+					AccountID:   account.ID,
+					Platform:    account.Platform,
+					Content:     publishContent,
+					ContentType: item.ContentType,
+					Script:      item.Script,
+					SlidesJSON:  string(slidesJSON),
+					Hashtags:    strings.Join(item.Hashtags, " "),
+					CTAText:     item.CTAText,
+					Day:         item.Day,
+					ScheduledAt: scheduledTime,
+					AIReasoning: reasoning,
+					Status:      "pending",
+				}
+				database.DB.Create(&post)
 		}
 	}
 

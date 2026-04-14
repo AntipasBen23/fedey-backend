@@ -58,6 +58,14 @@ v1.POST("/revise", handlers.ReviseHandler)
 
 		// Script Engine (video scripts, carousels, threads)
 		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
+
+		// Carousel Image Generation (DALL-E 3)
+		v1.POST("/carousel/images", handlers.GenerateCarouselImagesHandler)
+
+		// Video Generation (Runway ML)
+		v1.POST("/video/generate", handlers.GenerateVideoHandler)
+		v1.GET("/video/status/:taskId", handlers.GetVideoStatusHandler)
+		v1.DELETE("/video/task/:taskId", handlers.CancelVideoTaskHandler)
 	}
 
 port := os.Getenv("PORT")
