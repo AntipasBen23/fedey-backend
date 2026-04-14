@@ -55,6 +55,9 @@ v1.POST("/revise", handlers.ReviseHandler)
 
 		// Conversational AI
 		v1.POST("/chat", handlers.ChatWithFurciHandler)
+
+		// Script Engine (video scripts, carousels, threads)
+		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
 	}
 
 port := os.Getenv("PORT")

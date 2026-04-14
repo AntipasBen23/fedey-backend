@@ -16,11 +16,12 @@ type ReviseRequest struct {
 	Feedback        string         `json:"feedback"`
 }
 
-const revisePromptTemplate = `The user has the following content calendar but is unhappy with it. 
+const revisePromptTemplate = `The user has the following content calendar but has feedback on it.
 
 Feedback from user: "%s"
 
-Please revise the entire 14-day calendar to strictly address their concerns while maintaining a professional and strategic tone.
+Revise the calendar to address their feedback while keeping the same content types and structure.
+Keep scripts, slides, hashtags, and all rich content fields intact — just improve the quality based on the feedback.
 
 Current Calendar:
 %s
@@ -28,8 +29,18 @@ Current Calendar:
 Format requirements: Return ONLY a valid JSON object matching this schema exactly:
 {
   "calendar": [
-    { "day": 1, "hook": "...", "content": "...", "media": "..." },
-    ...
+    {
+      "day": 1,
+      "hook": "...",
+      "content": "...",
+      "media": "...",
+      "contentType": "...",
+      "script": "...",
+      "slides": ["..."],
+      "hashtags": ["#tag"],
+      "visualPrompt": "...",
+      "ctaText": "..."
+    }
   ]
 }`
 

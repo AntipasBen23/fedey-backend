@@ -20,28 +20,63 @@ type CalendarRequest struct {
 }
 
 type CalendarItem struct {
-	Day     int    `json:"day"`
-	Hook    string `json:"hook"`
-	Content string `json:"content"`
-	Media   string `json:"media"`
+	Day          int      `json:"day"`
+	Hook         string   `json:"hook"`
+	Content      string   `json:"content"`
+	Media        string   `json:"media"`
+	ContentType  string   `json:"contentType"`  // tweet | thread | carousel | video_script | linkedin_post
+	Script       string   `json:"script"`        // Full script body (threads and video scripts)
+	Slides       []string `json:"slides"`        // Carousel slide copy (slide 1 = hook, last = CTA)
+	Hashtags     []string `json:"hashtags"`
+	VisualPrompt string   `json:"visualPrompt"` // DALL-E prompt for thumbnail/cover image
+	CTAText      string   `json:"ctaText"`       // Call to action line
 }
 
 type CalendarResponse struct {
 	Calendar []CalendarItem `json:"calendar"`
 }
 
-const calendarPromptTemplate = `Create a professional %d-day social media content calendar for the following product. 
+const calendarPromptTemplate = `You are Furci AI, a professional social media manager who writes like a human — not a robot.
 
-For each day, provide:
-1. Hook: A catchy opening line.
-2. Content: The main body or value proposition.
-3. Media: Suggested media format (e.g., Image, Short Video, Thread, Infographic).
+Create a %d-day content calendar for the product below. Each day must use a DIFFERENT content type to create variety.
 
-Format requirements: Return ONLY a valid JSON object matching this schema exactly:
+CONTENT TYPES you must rotate through:
+- "tweet": A single punchy tweet (max 280 chars). No fluff. Direct value.
+- "thread": A numbered Twitter/X thread (6-8 tweets). Tweet 1 = hook, tweets 2-7 = value, tweet 8 = CTA.
+- "carousel": A LinkedIn/Instagram carousel (6-8 slides). Slide 1 = bold hook, slides 2-6 = one insight per slide, last slide = CTA + follow prompt.
+- "video_script": A short-form video script (30-60 seconds). Write it scene-by-scene with timestamps.
+- "linkedin_post": A long-form LinkedIn post (150-300 words). Hook line, story/insight, actionable takeaway.
+
+For EVERY item, return these fields:
+- day: Day number
+- hook: The attention-grabbing first line (used as preview text)
+- content: Full post body (for tweet/linkedin_post types — the complete text ready to publish)
+- media: Visual direction (e.g., "Talking head, natural light", "Screen recording with face cam", "Minimal graphic, white bg", "Text on dark bg")
+- contentType: One of the 5 types above
+- script:
+  * For "thread": All tweets written out, numbered 1/ through 8/, each tweet max 280 chars
+  * For "video_script": Scene-by-scene with format "[0-3s] HOOK: ...", "[3-20s] PROBLEM: ...", "[20-50s] SOLUTION (step by step): ...", "[50-60s] CTA: ..."
+  * For other types: leave empty string ""
+- slides: For "carousel" only — array of 6-8 strings, each string is the full copy for that slide. For other types: empty array [].
+- hashtags: 3-5 highly relevant hashtags (no generic ones like #motivation)
+- visualPrompt: A DALL-E image generation prompt for the thumbnail or cover visual (be specific about style, colors, composition)
+- ctaText: The explicit call-to-action (e.g., "Follow for daily tips", "Comment your biggest challenge", "DM me 'START' to learn more")
+
+Format requirements: Return ONLY a valid JSON object. No markdown, no explanation. Schema:
 {
   "calendar": [
-    { "day": 1, "hook": "...", "content": "...", "media": "..." },
-    ...
+    {
+      "day": 1,
+      "hook": "...",
+      "content": "...",
+      "media": "...",
+      "contentType": "tweet|thread|carousel|video_script|linkedin_post",
+      "script": "...",
+      "slides": ["...", "..."],
+      "hashtags": ["#tag1", "#tag2"],
+      "visualPrompt": "...",
+      "ctaText": "..."
+    }
   ]
 }
 
@@ -72,10 +107,15 @@ func CalendarHandler(c *gin.Context) {
 
 	prompt := fmt.Sprintf(calendarPromptTemplate, days, req.ProductSummary)
 
+	model := openai.GPT4o
+	if envModel := os.Getenv("OPENAI_MODEL"); envModel != "" {
+		model = envModel
+	}
+
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
+			Model: model,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
