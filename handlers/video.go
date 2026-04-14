@@ -2,13 +2,16 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -191,13 +194,38 @@ func GetVideoStatusHandler(c *gin.Context) {
 	}
 
 	resp := VideoTaskResponse{
-		TaskID:  task.ID,
-		Status:  task.Status,
+		TaskID: task.ID,
+		Status: task.Status,
 	}
 
 	if task.Status == "SUCCEEDED" && len(task.Output) > 0 {
-		resp.VideoURL = task.Output[0]
-		resp.Message = "Video is ready."
+		runwayURL := task.Output[0]
+		finalURL := runwayURL
+		permanent := false
+
+		// Auto-upload to Cloudinary if configured
+		if utils.CloudinaryEnabled() {
+			uploaded, uploadErr := utils.UploadVideo(
+				context.Background(),
+				runwayURL,
+				"furci/videos",
+				"video_"+taskID,
+			)
+			if uploadErr != nil {
+				log.Printf("[Video] Cloudinary upload failed for task %s: %v — using Runway URL", taskID, uploadErr)
+			} else {
+				finalURL = uploaded
+				permanent = true
+				log.Printf("[Video] Video uploaded to Cloudinary: %s", finalURL)
+			}
+		}
+
+		resp.VideoURL = finalURL
+		if permanent {
+			resp.Message = "Video is ready and saved permanently to Cloudinary."
+		} else {
+			resp.Message = "Video is ready. Note: Runway URLs are temporary — configure Cloudinary for permanent storage."
+		}
 	} else if task.Status == "FAILED" {
 		resp.Message = "Video generation failed: " + task.Failure
 	} else {

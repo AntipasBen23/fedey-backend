@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sync"
 
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -21,9 +23,10 @@ type CarouselImageRequest struct {
 }
 
 type SlideImage struct {
-	Index  int    `json:"index"`
-	URL    string `json:"url"`
-	Prompt string `json:"prompt"`
+	Index     int    `json:"index"`
+	URL       string `json:"url"`       // Permanent Cloudinary URL (or temp DALL-E URL if Cloudinary not configured)
+	Permanent bool   `json:"permanent"` // true = Cloudinary, false = expires in ~1h
+	Prompt    string `json:"prompt"`
 }
 
 type CarouselImageResponse struct {
@@ -35,7 +38,7 @@ type CarouselImageResponse struct {
 
 // POST /v1/carousel/images
 // Generates DALL-E 3 images for carousel slides in parallel.
-// Each URL is valid for ~1 hour — download and store on the frontend if persistence is needed.
+// If Cloudinary is configured, images are immediately uploaded and permanent URLs are returned.
 func GenerateCarouselImagesHandler(c *gin.Context) {
 	var req CarouselImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -74,9 +77,10 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 		style = openai.CreateImageStyleNatural
 	}
 
+	cldEnabled := utils.CloudinaryEnabled()
 	client := openai.NewClient(apiKey)
 
-	// Generate all slides in parallel
+	// Generate + upload all slides in parallel
 	images := make([]SlideImage, len(prompts))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -87,13 +91,12 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 		go func(idx int, p string) {
 			defer wg.Done()
 
-			// Add carousel design context to every prompt
 			fullPrompt := fmt.Sprintf(
 				"Social media carousel slide design. %s. Clean, modern, high contrast, professional. No text overlays. Suitable as a background for a carousel post.",
 				p,
 			)
 
-			resp, err := client.CreateImage(
+			dalleResp, err := client.CreateImage(
 				context.Background(),
 				openai.ImageRequest{
 					Model:   openai.CreateImageModelDallE3,
@@ -113,11 +116,34 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 				return
 			}
 
+			dalleURL := dalleResp.Data[0].URL
+			finalURL := dalleURL
+			permanent := false
+
+			// Immediately upload to Cloudinary if configured
+			if cldEnabled {
+				publicID := fmt.Sprintf("slide_%d", idx+1)
+				uploaded, uploadErr := utils.UploadImage(
+					context.Background(),
+					dalleURL,
+					"furci/carousel",
+					publicID,
+				)
+				if uploadErr != nil {
+					log.Printf("[Carousel] Cloudinary upload failed for slide %d: %v — using temp URL", idx+1, uploadErr)
+				} else {
+					finalURL = uploaded
+					permanent = true
+					log.Printf("[Carousel] Slide %d uploaded to Cloudinary: %s", idx+1, finalURL)
+				}
+			}
+
 			mu.Lock()
 			images[idx] = SlideImage{
-				Index:  idx + 1,
-				URL:    resp.Data[0].URL,
-				Prompt: p,
+				Index:     idx + 1,
+				URL:       finalURL,
+				Permanent: permanent,
+				Prompt:    p,
 			}
 			mu.Unlock()
 		}(i, prompt)
@@ -130,7 +156,6 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 		return
 	}
 
-	// Filter out any slots that failed (partial success is OK)
 	var result []SlideImage
 	for _, img := range images {
 		if img.URL != "" {
@@ -138,8 +163,13 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 		}
 	}
 
+	warning := ""
+	if !cldEnabled {
+		warning = "Cloudinary not configured — image URLs expire in ~1 hour. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET to enable permanent storage."
+	}
+
 	c.JSON(http.StatusOK, CarouselImageResponse{
 		Images:  result,
-		Warning: "Image URLs expire after ~1 hour. Download and store them if you need persistence.",
+		Warning: warning,
 	})
 }
