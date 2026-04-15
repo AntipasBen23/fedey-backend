@@ -43,13 +43,19 @@ type VideoTaskResponse struct {
 
 // ─── Internal Runway types ───────────────────────────────────────────────────
 
+// runwayImageInput is the format Runway API expects for promptImage entries
+type runwayImageInput struct {
+	URI      string `json:"uri"`
+	Position string `json:"position"` // "first" | "last"
+}
+
 type runwayCreateRequest struct {
-	Model          string `json:"model"`
-	PromptText     string `json:"promptText"`
-	PromptImage    string `json:"promptImage,omitempty"`
-	Duration       int    `json:"duration"`
-	Ratio          string `json:"ratio"`
-	Watermark      bool   `json:"watermark"`
+	Model        string             `json:"model"`
+	PromptText   string             `json:"promptText,omitempty"`
+	PromptImage  []runwayImageInput `json:"promptImage"`
+	Duration     int                `json:"duration"`
+	Ratio        string             `json:"ratio"`
+	Watermark    bool               `json:"watermark"`
 }
 
 type runwayTaskStatus struct {
@@ -200,12 +206,14 @@ func GenerateVideoHandler(c *gin.Context) {
 	}
 
 	payload := runwayCreateRequest{
-		Model:       "gen4_turbo",
-		PromptText:  req.PromptText,
-		PromptImage: imageURL,
-		Duration:    duration,
-		Ratio:       ratio,
-		Watermark:   req.Watermark,
+		Model:      "gen4_turbo",
+		PromptText: req.PromptText,
+		PromptImage: []runwayImageInput{
+			{URI: imageURL, Position: "first"},
+		},
+		Duration:  duration,
+		Ratio:     ratio,
+		Watermark: req.Watermark,
 	}
 
 	data, status, err := runwayRequest("POST", "/image_to_video", payload)
