@@ -52,12 +52,20 @@ func CheckForDuePosts() {
 func executePost(post models.ScheduledPost) {
 	var account models.SocialAccount
 	if err := database.DB.First(&account, post.AccountID).Error; err != nil {
-		log.Printf("[Worker] Error finding account for post %d: %v", post.ID, err)
+		log.Printf("[Worker] FAILED — account not found for post %d: %v", post.ID, err)
 		database.DB.Model(&post).Update("status", "failed")
 		return
 	}
 
-	log.Printf("[Worker] Publishing [%s] to %s (contentType=%s)", post.Status, post.Platform, post.ContentType)
+	// Sanity-check token before attempting
+	if account.AccessToken == "" {
+		log.Printf("[Worker] FAILED — post %d: access token is empty for account %d (%s). Re-connect the account.", post.ID, account.ID, post.Platform)
+		database.DB.Model(&post).Update("status", "failed")
+		return
+	}
+
+	log.Printf("[Worker] Attempting post %d → %s [%s] (token prefix: %s...)",
+		post.ID, post.Platform, post.ContentType, safePrefix(account.AccessToken, 12))
 
 	var externalID string
 	var success bool
@@ -69,21 +77,28 @@ func executePost(post models.ScheduledPost) {
 	case "linkedin":
 		externalID, success, err = postToLinkedIn(account.AccessToken, post)
 	default:
-		log.Printf("[Worker] Unknown platform %s for post %d", post.Platform, post.ID)
+		log.Printf("[Worker] FAILED — unknown platform '%s' for post %d", post.Platform, post.ID)
 		database.DB.Model(&post).Update("status", "failed")
 		return
 	}
 
 	if success {
-		log.Printf("[Worker] Successfully posted %d to %s (external: %s)", post.ID, post.Platform, externalID)
+		log.Printf("[Worker] SUCCESS — post %d published to %s (external ID: %s)", post.ID, post.Platform, externalID)
 		database.DB.Model(&post).Updates(map[string]interface{}{
 			"status":      "posted",
 			"external_id": externalID,
 		})
 	} else {
-		log.Printf("[Worker] Failed to post %d to %s: %v", post.ID, post.Platform, err)
+		log.Printf("[Worker] FAILED — post %d on %s: %v", post.ID, post.Platform, err)
 		database.DB.Model(&post).Update("status", "failed")
 	}
+}
+
+func safePrefix(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 // ─── X (Twitter) Publishing ──────────────────────────────────────────────────
