@@ -10,6 +10,7 @@ import (
 
 type DashboardData struct {
 	Calendar       []models.ScheduledPost `json:"calendar"`
+	History        []models.ScheduledPost `json:"history"`
 	SocialAccounts []models.SocialAccount `json:"socialAccounts"`
 	Strategy       *models.UserStrategy   `json:"strategy"`
 	Stats          map[string]interface{} `json:"stats"`
@@ -21,30 +22,41 @@ func GetDashboardHandler(c *gin.Context) {
 		return
 	}
 
-	// 1. Fetch Scheduled Content from discrete posts table
+	// 1. Pending posts (upcoming queue)
 	var scheduledPosts []models.ScheduledPost
-	result := database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Find(&scheduledPosts)
-	if result.Error != nil {
+	if err := database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Find(&scheduledPosts).Error; err != nil {
 		scheduledPosts = []models.ScheduledPost{}
 	}
 
-	// 2. Fetch Connected Social Accounts
+	// 2. History: posted + failed — most recent 20
+	var history []models.ScheduledPost
+	if err := database.DB.Where("status IN ?", []string{"posted", "failed"}).
+		Order("scheduled_at desc").Limit(20).Find(&history).Error; err != nil {
+		history = []models.ScheduledPost{}
+	}
+
+	// 3. Fetch Connected Social Accounts
 	var accounts []models.SocialAccount
 	database.DB.Find(&accounts)
 
-	// 3. Fetch Current Strategy
+	// 4. Fetch Current Strategy
 	var strategy models.UserStrategy
 	database.DB.Order("created_at desc").First(&strategy)
 
-	// 4. Prepare Mock Stats
+	// 5. Stats
+	var postedCount int64
+	database.DB.Model(&models.ScheduledPost{}).Where("status = ?", "posted").Count(&postedCount)
+
 	stats := map[string]interface{}{
-		"totalPosts":    len(scheduledPosts),
+		"totalPosts":        len(scheduledPosts),
+		"postedCount":       postedCount,
 		"activeExperiments": 3,
-		"impactScore":   "92%",
+		"impactScore":       "92%",
 	}
 
 	c.JSON(http.StatusOK, DashboardData{
 		Calendar:       scheduledPosts,
+		History:        history,
 		SocialAccounts: accounts,
 		Strategy:       &strategy,
 		Stats:          stats,
