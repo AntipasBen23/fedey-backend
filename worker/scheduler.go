@@ -49,18 +49,24 @@ func CheckForDuePosts() {
 	}
 }
 
+func failPost(post models.ScheduledPost, reason string) {
+	log.Printf("[Worker] FAILED — post %d: %s", post.ID, reason)
+	database.DB.Model(&post).Updates(map[string]interface{}{
+		"status":         "failed",
+		"failure_reason": reason,
+	})
+}
+
 func executePost(post models.ScheduledPost) {
 	var account models.SocialAccount
 	if err := database.DB.First(&account, post.AccountID).Error; err != nil {
-		log.Printf("[Worker] FAILED — account not found for post %d: %v", post.ID, err)
-		database.DB.Model(&post).Update("status", "failed")
+		failPost(post, fmt.Sprintf("account not found (accountId=%d): %v", post.AccountID, err))
 		return
 	}
 
 	// Sanity-check token before attempting
 	if account.AccessToken == "" {
-		log.Printf("[Worker] FAILED — post %d: access token is empty for account %d (%s). Re-connect the account.", post.ID, account.ID, post.Platform)
-		database.DB.Model(&post).Update("status", "failed")
+		failPost(post, fmt.Sprintf("access token is empty for account %d — re-connect %s", account.ID, post.Platform))
 		return
 	}
 
@@ -77,20 +83,19 @@ func executePost(post models.ScheduledPost) {
 	case "linkedin":
 		externalID, success, err = postToLinkedIn(account.AccessToken, post)
 	default:
-		log.Printf("[Worker] FAILED — unknown platform '%s' for post %d", post.Platform, post.ID)
-		database.DB.Model(&post).Update("status", "failed")
+		failPost(post, fmt.Sprintf("unknown platform: %s", post.Platform))
 		return
 	}
 
 	if success {
 		log.Printf("[Worker] SUCCESS — post %d published to %s (external ID: %s)", post.ID, post.Platform, externalID)
 		database.DB.Model(&post).Updates(map[string]interface{}{
-			"status":      "posted",
-			"external_id": externalID,
+			"status":         "posted",
+			"external_id":    externalID,
+			"failure_reason": "",
 		})
 	} else {
-		log.Printf("[Worker] FAILED — post %d on %s: %v", post.ID, post.Platform, err)
-		database.DB.Model(&post).Update("status", "failed")
+		failPost(post, fmt.Sprintf("%v", err))
 	}
 }
 
