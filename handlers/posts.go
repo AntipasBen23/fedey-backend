@@ -11,8 +11,10 @@ import (
 )
 
 type UpdatePostRequest struct {
-	Content     string `json:"content"`
-	ScheduledAt string `json:"scheduledAt"` // Accept as string — datetime-local sends "YYYY-MM-DDTHH:mm", toISOString sends RFC3339
+	Content       string `json:"content"`
+	ScheduledAt   string `json:"scheduledAt"`   // ISO8601 or datetime-local
+	VideoURL      string `json:"videoUrl"`       // Runway / Cloudinary video URL
+	ImageURLsJSON string `json:"imageUrlsJson"`  // JSON array of image URLs (carousel slides)
 }
 
 func UpdatePostHandler(c *gin.Context) {
@@ -65,6 +67,13 @@ func UpdatePostHandler(c *gin.Context) {
 			return
 		}
 		post.ScheduledAt = parsed
+	}
+
+	if req.VideoURL != "" {
+		post.VideoURL = req.VideoURL
+	}
+	if req.ImageURLsJSON != "" {
+		post.ImageURLsJSON = req.ImageURLsJSON
 	}
 
 	if err := database.DB.Save(&post).Error; err != nil {
