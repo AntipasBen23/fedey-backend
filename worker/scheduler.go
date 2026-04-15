@@ -113,10 +113,33 @@ func postToX(token string, post models.ScheduledPost) (string, bool, error) {
 	}
 }
 
+// truncateTweet trims text to Twitter's 280-character limit.
+// It cuts at the last space before the limit to avoid breaking words,
+// and appends "…" so the tweet still reads naturally.
+func truncateTweet(text string) string {
+	const limit = 280
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	// Cut at last space before limit-1 (leave room for ellipsis)
+	cut := limit - 1
+	for cut > 0 && runes[cut] != ' ' {
+		cut--
+	}
+	if cut == 0 {
+		cut = limit - 1 // no space found, hard cut
+	}
+	return string(runes[:cut]) + "…"
+}
+
 // postSingleTweetToX publishes a single tweet and returns the tweet ID.
 func postSingleTweetToX(token, text string) (string, bool, error) {
 	// X API v2 tweet endpoint
 	const xTweetsURL = "https://api.twitter.com/2/tweets"
+
+	// Enforce 280-character Twitter limit
+	text = truncateTweet(text)
 
 	payload := map[string]interface{}{
 		"text": text,
