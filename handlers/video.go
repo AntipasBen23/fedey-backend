@@ -13,6 +13,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
+	openai "github.com/sashabaranov/go-openai"
 )
 
 // Runway ML API base URL (Gen-3 Alpha)
@@ -94,10 +95,64 @@ func runwayRequest(method, path string, body interface{}) ([]byte, int, error) {
 	return data, resp.StatusCode, err
 }
 
+// generateStartingFrame uses DALL-E 3 to create a starting frame image for the video.
+// This is required by gen4_turbo which needs an input image to animate.
+func generateStartingFrame(promptText string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not set")
+	}
+
+	client := openai.NewClient(apiKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Build a visual prompt for the starting frame
+	visualPrompt := fmt.Sprintf(
+		"Cinematic still frame, professional photography. %s. "+
+			"High quality, dramatic lighting, suitable as a video thumbnail. "+
+			"No text, no watermarks.",
+		promptText,
+	)
+	if len(visualPrompt) > 900 {
+		visualPrompt = visualPrompt[:900]
+	}
+
+	resp, err := client.CreateImage(ctx, openai.ImageRequest{
+		Model:          openai.CreateImageModelDallE3,
+		Prompt:         visualPrompt,
+		N:              1,
+		Size:           openai.CreateImageSize1024x1792, // Portrait — matches 768:1280 ratio
+		Quality:        openai.CreateImageQualityStandard,
+		ResponseFormat: openai.CreateImageResponseFormatURL,
+	})
+	if err != nil {
+		return "", fmt.Errorf("DALL-E error: %w", err)
+	}
+	if len(resp.Data) == 0 {
+		return "", fmt.Errorf("DALL-E returned no images")
+	}
+
+	imageURL := resp.Data[0].URL
+
+	// Upload to Cloudinary immediately so the URL doesn't expire before Runway fetches it
+	if utils.CloudinaryEnabled() {
+		permanent, uploadErr := utils.UploadImage(context.Background(), imageURL, "furci/video-frames", "")
+		if uploadErr == nil {
+			return permanent, nil
+		}
+		log.Printf("[Video] Cloudinary upload of starting frame failed, using DALL-E URL directly: %v", uploadErr)
+	}
+
+	return imageURL, nil
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 // POST /v1/video/generate
 // Kicks off an async Runway ML video generation task.
+// gen4_turbo requires a starting frame image — if none is provided, one is
+// auto-generated with DALL-E 3 from the prompt text.
 // Returns a taskId — poll GET /v1/video/status/:taskId for the result.
 func GenerateVideoHandler(c *gin.Context) {
 	var req VideoGenerateRequest
@@ -128,15 +183,29 @@ func GenerateVideoHandler(c *gin.Context) {
 		ratio = "768:1280" // Portrait (Reels/TikTok-friendly default)
 	}
 
-	payload := runwayCreateRequest{
-		Model:      "gen4_turbo",
-		PromptText: req.PromptText,
-		Duration:   duration,
-		Ratio:      ratio,
-		Watermark:  req.Watermark,
+	// gen4_turbo is an image-to-video model — a starting frame is required.
+	// Auto-generate one with DALL-E 3 if the caller didn't provide one.
+	imageURL := req.PromptImageURL
+	if imageURL == "" {
+		log.Printf("[Video] No starting frame provided — generating one with DALL-E 3")
+		generated, err := generateStartingFrame(req.PromptText)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Could not generate starting frame: " + err.Error(),
+			})
+			return
+		}
+		imageURL = generated
+		log.Printf("[Video] Starting frame generated: %s", imageURL[:min(60, len(imageURL))])
 	}
-	if req.PromptImageURL != "" {
-		payload.PromptImage = req.PromptImageURL
+
+	payload := runwayCreateRequest{
+		Model:       "gen4_turbo",
+		PromptText:  req.PromptText,
+		PromptImage: imageURL,
+		Duration:    duration,
+		Ratio:       ratio,
+		Watermark:   req.Watermark,
 	}
 
 	data, status, err := runwayRequest("POST", "/image_to_video", payload)
