@@ -91,6 +91,23 @@ func CalendarHandler(c *gin.Context) {
 		return
 	}
 
+	if database.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		return
+	}
+
+	// 1. Short-Circuit: Check for existing DRAFT
+	var existing models.ContentCalendar
+	err := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&existing).Error
+	if err == nil {
+		var calRes CalendarResponse
+		if err := json.Unmarshal([]byte(existing.ContentJSON), &calRes.Calendar); err == nil {
+			c.JSON(http.StatusOK, calRes)
+			return
+		}
+	}
+
+	// 2. Fallback: Generate New via OpenAI
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing."})
@@ -99,8 +116,7 @@ func CalendarHandler(c *gin.Context) {
 
 	client := openai.NewClient(apiKey)
 	
-	// Trial Logic: Default to 3 days for now
-	isPremium := false // Placeholder for future subscription check
+	isPremium := false
 	days := 3
 	if isPremium {
 		days = 14
@@ -118,10 +134,7 @@ func CalendarHandler(c *gin.Context) {
 		openai.ChatCompletionRequest{
 			Model: model,
 			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
+				{Role: openai.ChatMessageRoleUser, Content: prompt},
 			},
 			ResponseFormat: &openai.ChatCompletionResponseFormat{
 				Type: openai.ChatCompletionResponseFormatTypeJSONObject,
@@ -142,17 +155,33 @@ func CalendarHandler(c *gin.Context) {
 	}
 
 	// Persist to Database as Draft
-	if database.DB != nil {
-		contentJSON, _ := json.Marshal(calRes.Calendar)
-		dbCal := models.ContentCalendar{
-			ProductSummary: req.ProductSummary,
-			ContentJSON:    string(contentJSON),
-			Status:         "draft",
-			DayCount:       days,
-		}
-		database.DB.Create(&dbCal)
+	contentJSON, _ := json.Marshal(calRes.Calendar)
+	dbCal := models.ContentCalendar{
+		ProductSummary: req.ProductSummary,
+		ContentJSON:    string(contentJSON),
+		Status:         "draft",
+		DayCount:       days,
 	}
+	database.DB.Create(&dbCal)
+
 	c.JSON(http.StatusOK, calRes)
+}
+
+func GetCalendarStatusHandler(c *gin.Context) {
+	if database.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		return
+	}
+
+	var cal models.ContentCalendar
+	// Find the most recent calendar
+	err := database.DB.Order("created_at desc").First(&cal).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "none"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": cal.Status})
 }
 
 type PostSchedule struct {
