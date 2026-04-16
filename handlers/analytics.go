@@ -13,6 +13,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type PeakHourData struct {
+	Day        int     `json:"day"`        // 0-6 (Sun-Sat)
+	Hour       int     `json:"hour"`       // 0-23
+	Engagement float64 `json:"engagement"` // Avg Engagement Rate
+	Reach      int     `json:"reach"`      // Total Impressions
+}
+
+func GetPeakHoursHandler(c *gin.Context) {
+	if database.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		return
+	}
+
+	var results []PeakHourData
+	// Query to aggregate engagement and reach by day and hour
+	err := database.DB.Table("post_analytics").
+		Select("EXTRACT(DOW FROM scheduled_posts.scheduled_at) as day, EXTRACT(HOUR FROM scheduled_posts.scheduled_at) as hour, AVG(post_analytics.engagement_rate) as engagement, SUM(post_analytics.impressions) as reach").
+		Joins("JOIN scheduled_posts ON scheduled_posts.id = post_analytics.scheduled_post_id").
+		Group("day, hour").
+		Scan(&results).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query peak hours: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}
+
 // ensure models is used (FollowerSnapshot is referenced in sync handler)
 var _ = models.FollowerSnapshot{}
 

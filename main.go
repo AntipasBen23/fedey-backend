@@ -48,10 +48,13 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Analytics
 		v1.GET("/analytics", handlers.GetAnalyticsHandler)
 		v1.POST("/analytics/sync", handlers.SyncAnalyticsHandler)
+		v1.GET("/analytics/peak-hours", handlers.GetPeakHoursHandler)
 
 		// Posts Management
 		v1.PUT("/posts/:id", handlers.UpdatePostHandler)
 		v1.DELETE("/posts/:id", handlers.DeletePostHandler)
+		v1.POST("/posts", handlers.CreatePostHandler)
+		v1.POST("/posts/polish", handlers.AIPolishHandler)
 
 		// Conversational AI
 		v1.POST("/chat", handlers.ChatWithFurciHandler)
