@@ -26,38 +26,48 @@ func ChatWithFurciHandler(c *gin.Context) {
 
 	// 1. Gather Dashboard Context for the AI
 	
-	// A. Pending Posts
+	// A. Pending Posts (Upcoming Queue)
 	var pendingPosts []models.ScheduledPost
-	database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Limit(5).Find(&pendingPosts)
+	database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Limit(10).Find(&pendingPosts)
 	postContext := ""
 	for _, p := range pendingPosts {
-		postContext += fmt.Sprintf("- [%s at %s]: %s\n", p.Platform, p.ScheduledAt.Format("Jan 02, 15:04"), p.Content[:50]+"...")
+		postContext += fmt.Sprintf("- [%s at %s]: %s\n", p.Platform, p.ScheduledAt.Format("Jan 02, 15:04"), p.Content[:60]+"...")
 	}
 
 	// B. Current Strategy
 	var strategy models.UserStrategy
 	database.DB.Order("created_at desc").First(&strategy)
 
-	// C. Trends (Simplified context)
-	// We'll skip deep trend context to keep prompt small, but mention we have them.
-	
-	systemPrompt := fmt.Sprintf(`
-		You are Furci, the intelligent Social Growth COO of this operating system.
-		Your goal is to help the user manage their brand, understand their dashboard, and grow their presence.
+	// C. Analytics Summary
+	analytics := buildAnalyticsOverview()
+	analyticsContext := fmt.Sprintf(`
+		- Total Followers: %d (%+d in last 30d)
+		- Total Impressions: %d
+		- Avg Engagement Rate: %.2f%%
+		- Posts Analyzed: %d
+		- Top Post: %s (%.2f%% eng)
+	`, analytics.FollowerCount, analytics.FollowerGrowth, analytics.TotalImpressions, analytics.AvgEngRate, analytics.PostsAnalyzed, 
+	   func() string { if len(analytics.TopPosts) > 0 { return analytics.TopPosts[0].Snippet }; return "None yet" }(),
+	   func() float64 { if len(analytics.TopPosts) > 0 { return analytics.TopPosts[0].EngRate }; return 0.0 }())
 
-		CURRENT SITUATION:
+	systemPrompt := fmt.Sprintf(`
+		You are Furci, the intelligent Social Growth COO and "Brain" of this Operating System.
+		Your goal is to help the user manage their brand, understand their dashboard metrics, and scale their presence autonomously.
+
+		DASHBOARD INTELLIGENCE (REAL-TIME DATA):
 		- Brand Identity: %s
-		- Strategy Focus: %s
-		- Upcoming Posts in Queue (%d pending total):
+		- Growth Strategy: %s
+		- Analytics Overview: %s
+		- Upcoming Queue (%d pending total):
 		%s
 
 		INSTRUCTIONS:
-		- Be professional, concise, and insightful.
-		- Always reference specific data from the "CURRENT SITUATION" if relevant to the question.
-		- If asked how "work is going", summarize the upcoming posts and the overall strategy health.
-		- Keep replies under 3 sentences unless a deep strategy explanation is requested.
-		- You are an OS component, not just a chatbot. Speak like the brain of the platform.
-	`, strategy.IdentityAudit, strategy.GrowthExperiments, len(pendingPosts), postContext)
+		- Speak with authority as the OS component responsible for growth.
+		- Always reference specific data from the "DASHBOARD INTELLIGENCE" (e.g., follower counts, engagement stats, or specific upcoming posts).
+		- If the user asks "how is work going", provide a professional summary of their recent growth and the next key posts in the queue.
+		- Keep replies professional, slightly provocative/ambitious, and concise (under 4 sentences).
+		- You are not just a chatbot; you are the executive controller of this brand.
+	`, strategy.IdentityAudit, strategy.GrowthExperiments, analyticsContext, len(pendingPosts), postContext)
 
 	// 2. Call OpenAI
 	apiKey := os.Getenv("OPENAI_API_KEY")
