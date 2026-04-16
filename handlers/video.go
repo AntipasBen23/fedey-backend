@@ -216,13 +216,23 @@ func GenerateVideoHandler(c *gin.Context) {
 		Watermark: req.Watermark,
 	}
 
+	// Log the exact payload being sent so we can diagnose Runway rejections
+	payloadBytes, _ := json.Marshal(payload)
+	log.Printf("[Video] Sending to Runway: %s", string(payloadBytes))
+
 	data, status, err := runwayRequest("POST", "/image_to_video", payload)
 	if err != nil {
+		log.Printf("[Video] Runway request error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Runway API error: " + err.Error()})
 		return
 	}
+	log.Printf("[Video] Runway response status=%d body=%s", status, string(data))
 	if status >= 400 {
-		c.JSON(status, gin.H{"error": "Runway rejected the request", "detail": string(data)})
+		// Return the full Runway error to the frontend so it's visible in the browser
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":  "Runway error (" + fmt.Sprintf("%d", status) + "): " + string(data),
+			"detail": string(data),
+		})
 		return
 	}
 
