@@ -41,12 +41,16 @@ const calendarPromptTemplate = `You are Furci AI, a professional social media ma
 
 Create a %d-day content calendar for the product below. Each day must use a DIFFERENT content type to create variety.
 
+PLATFORM CONTEXT:
+The user is currently connected to: %s. 
+You must ONLY generate content types that make sense for these specific platforms. 
+
 CONTENT TYPES you must rotate through:
-- "tweet": A single punchy tweet (max 280 chars). No fluff. Direct value.
-- "thread": A numbered Twitter/X thread (6-8 tweets). Tweet 1 = hook, tweets 2-7 = value, tweet 8 = CTA.
-- "carousel": A LinkedIn/Instagram carousel (6-8 slides). Slide 1 = bold hook, slides 2-6 = one insight per slide, last slide = CTA + follow prompt.
-- "video_script": A short-form video script (30-60 seconds). Write it scene-by-scene with timestamps.
-- "linkedin_post": A long-form LinkedIn post (150-300 words). Hook line, story/insight, actionable takeaway.
+- "tweet": (Only if Twitter/X is connected) A single punchy tweet (max 280 chars). No fluff. Direct value.
+- "thread": (Only if Twitter/X is connected) A numbered Twitter/X thread (6-8 tweets). Tweet 1 = hook, tweets 2-7 = value, tweet 8 = CTA.
+- "carousel": (Highly recommended for LinkedIn) A multi-slide series (6-8 slides). Slide 1 = bold hook, slides 2-6 = one insight per slide, last slide = CTA + follow prompt.
+- "video_script": (Great for TikTok/Twitter/LinkedIn) A short-form video script (30-60 seconds). Write it scene-by-scene with timestamps.
+- "linkedin_post": (Only if LinkedIn is connected) A long-form LinkedIn post (150-300 words). Hook line, story/insight, actionable takeaway.
 
 For EVERY item, return these fields:
 - day: Day number
@@ -108,6 +112,13 @@ func CalendarHandler(c *gin.Context) {
 	}
 
 	// 2. Fallback: Generate New via OpenAI
+	var platforms []string
+	database.DB.Model(&models.SocialAccount{}).Pluck("platform", &platforms)
+	platformContext := strings.Join(platforms, ", ")
+	if platformContext == "" {
+		platformContext = "Twitter (X)" // Fallback
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing."})
@@ -122,7 +133,8 @@ func CalendarHandler(c *gin.Context) {
 		days = 14
 	}
 
-	prompt := fmt.Sprintf(calendarPromptTemplate, days, req.ProductSummary)
+	// Customized prompt based on platforms
+	dynamicPrompt := fmt.Sprintf(calendarPromptTemplate, days, platformContext, req.ProductSummary)
 
 	model := openai.GPT4oMini
 	if envModel := os.Getenv("OPENAI_MODEL"); envModel != "" {
@@ -134,7 +146,7 @@ func CalendarHandler(c *gin.Context) {
 		openai.ChatCompletionRequest{
 			Model: model,
 			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleUser, Content: prompt},
+				{Role: openai.ChatMessageRoleUser, Content: dynamicPrompt},
 			},
 			ResponseFormat: &openai.ChatCompletionResponseFormat{
 				Type: openai.ChatCompletionResponseFormatTypeJSONObject,
