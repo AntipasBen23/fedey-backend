@@ -33,6 +33,11 @@ func InitDB() {
 		&models.UserPreferences{},
 		&models.FollowerSnapshot{},
 		&models.EngagementEvent{},
+		// Auth models
+		&models.User{},
+		&models.EmailVerification{},
+		&models.RefreshToken{},
+		&models.PasswordResetToken{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database: %v", err)

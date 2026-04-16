@@ -1,45 +1,61 @@
 package main
 
 import (
-"log"
-"os"
+	"log"
+	"os"
 
-"github.com/AntipasBen23/fedey-backend/database"
+	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/handlers"
+	"github.com/AntipasBen23/fedey-backend/middleware"
 	"github.com/AntipasBen23/fedey-backend/worker"
 	"github.com/gin-contrib/cors"
-"github.com/gin-gonic/gin"
-"github.com/joho/godotenv"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-_ = godotenv.Load()
-database.InitDB()
-worker.StartScheduler()
+	_ = godotenv.Load()
+	database.InitDB()
+	worker.StartScheduler()
 
-r := gin.Default()
+	r := gin.Default()
 
-r.Use(cors.New(cors.Config{
-AllowOrigins:     []string{"*"},
-AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-ExposeHeaders:    []string{"Content-Length"},
-AllowCredentials: true,
-}))
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
-v1 := r.Group("/v1")
-{
-v1.POST("/analyze", handlers.AnalyzeHandler)
-v1.POST("/auth/callback", handlers.AuthCallbackHandler)
-v1.DELETE("/auth/disconnect", handlers.DisconnectHandler)
-v1.POST("/strategy", handlers.StrategyHandler)
-v1.POST("/strategy/refine", handlers.StrategyRefineHandler)
-v1.POST("/calendar", handlers.CalendarHandler)
-v1.GET("/calendar/status", handlers.GetCalendarStatusHandler)
-v1.POST("/calendar/approve", handlers.ApproveCalendarHandler)
-v1.GET("/dashboard", handlers.GetDashboardHandler)
-v1.POST("/settings/autopilot", handlers.ToggleAutoPilotHandler)
-v1.POST("/revise", handlers.ReviseHandler)
+	v1 := r.Group("/v1")
+	{
+		// ── Public auth routes ──────────────────────────────────────────────
+		v1.POST("/user/register", handlers.RegisterHandler)
+		v1.POST("/user/verify-email", handlers.VerifyEmailHandler)
+		v1.POST("/user/resend-code", handlers.ResendCodeHandler)
+		v1.POST("/user/login", handlers.LoginHandler)
+		v1.POST("/user/refresh", handlers.RefreshTokenHandler)
+		v1.POST("/user/google", handlers.GoogleAuthHandler)
+		v1.POST("/user/forgot-password", handlers.ForgotPasswordHandler)
+		v1.POST("/user/reset-password", handlers.ResetPasswordHandler)
+		v1.POST("/user/logout", handlers.LogoutHandler)
+
+		// ── Protected user route ────────────────────────────────────────────
+		v1.GET("/user/me", middleware.RequireAuth(), handlers.GetMeHandler)
+
+		// ── Existing routes (kept open for now — add RequireAuth() as needed) ─
+		v1.POST("/analyze", handlers.AnalyzeHandler)
+		v1.POST("/auth/callback", handlers.AuthCallbackHandler)
+		v1.DELETE("/auth/disconnect", handlers.DisconnectHandler)
+		v1.POST("/strategy", handlers.StrategyHandler)
+		v1.POST("/strategy/refine", handlers.StrategyRefineHandler)
+		v1.POST("/calendar", handlers.CalendarHandler)
+		v1.GET("/calendar/status", handlers.GetCalendarStatusHandler)
+		v1.POST("/calendar/approve", handlers.ApproveCalendarHandler)
+		v1.GET("/dashboard", handlers.GetDashboardHandler)
+		v1.POST("/settings/autopilot", handlers.ToggleAutoPilotHandler)
+		v1.POST("/revise", handlers.ReviseHandler)
 
 		// Trends & Social Listening
 		v1.GET("/trends", handlers.GetTrendsHandler)
@@ -65,10 +81,10 @@ v1.POST("/revise", handlers.ReviseHandler)
 		v1.POST("/engagements/:id/approve", handlers.ApproveEngagementHandler)
 		v1.POST("/settings/ghost-mode", handlers.ToggleGhostModeHandler)
 
-		// Script Engine (video scripts, carousels, threads)
+		// Script Engine
 		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
 
-		// Carousel Image Generation (DALL-E 3) and Carousel Design (FFmpeg)
+		// Carousel
 		v1.POST("/carousel/images", handlers.GenerateCarouselImagesHandler)
 		v1.POST("/carousel/design", handlers.GenerateCarouselDesignHandler)
 
@@ -76,18 +92,18 @@ v1.POST("/revise", handlers.ReviseHandler)
 		v1.GET("/plan", handlers.GetPlanHandler)
 		v1.POST("/plan/upgrade", handlers.UpgradePlanHandler)
 
-		// Video Generation — template (FFmpeg, free) and AI (Runway ML, pro only)
+		// Video Generation
 		v1.POST("/video/template", handlers.GenerateTemplateVideoHandler)
 		v1.POST("/video/generate", handlers.GenerateVideoHandler)
 		v1.GET("/video/status/:taskId", handlers.GetVideoStatusHandler)
 		v1.DELETE("/video/task/:taskId", handlers.CancelVideoTaskHandler)
 	}
 
-port := os.Getenv("PORT")
-if port == "" {
-port = "8080"
-}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-log.Printf("Server starting on port %s", port)
-r.Run(":" + port)
+	log.Printf("Server starting on port %s", port)
+	r.Run(":" + port)
 }

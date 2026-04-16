@@ -109,6 +109,53 @@ type UserPreferences struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// ── Auth models ───────────────────────────────────────────────────────────────
+
+// User is the core identity record for app authentication.
+type User struct {
+	ID            uint           `gorm:"primaryKey" json:"id"`
+	Name          string         `json:"name"`
+	Email         string         `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash  string         `json:"-"` // empty for Google-only accounts
+	GoogleID      string         `gorm:"index" json:"-"`
+	IsVerified    bool           `gorm:"default:false" json:"isVerified"`
+	Plan          string         `gorm:"default:'free'" json:"plan"`
+	LoginAttempts int            `gorm:"default:0" json:"-"`
+	LockedUntil   *time.Time     `json:"-"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// EmailVerification holds a one-time 6-digit code for verifying a new user's email.
+type EmailVerification struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"index;not null"`
+	Code      string    `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Used      bool      `gorm:"default:false"`
+	CreatedAt time.Time
+}
+
+// RefreshToken stores server-side opaque refresh tokens for JWT rotation.
+type RefreshToken struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"index;not null"`
+	Token     string    `gorm:"uniqueIndex;not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time
+}
+
+// PasswordResetToken is a short-lived token for resetting a forgotten password.
+type PasswordResetToken struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"index;not null"`
+	Token     string    `gorm:"uniqueIndex;not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Used      bool      `gorm:"default:false"`
+	CreatedAt time.Time
+}
+
 // EngagementEvent tracks find-and-reply social listening events
 type EngagementEvent struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`
