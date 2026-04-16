@@ -28,7 +28,7 @@ type VideoGenerateRequest struct {
 	PromptImageURL string `json:"promptImageUrl,omitempty"`
 	// 5 or 10 seconds. Default: 5
 	Duration int `json:"duration,omitempty"`
-	// "1280:768" (landscape) | "768:1280" (portrait/Reels) | "1104:832" (square-ish). Default: portrait
+	// "1280:720" (landscape) | "720:1280" (portrait/Reels) | "1104:832" (square-ish). Default: portrait
 	Ratio string `json:"ratio,omitempty"`
 	// Watermark the video? Default: false
 	Watermark bool `json:"watermark,omitempty"`
@@ -186,7 +186,7 @@ func GenerateVideoHandler(c *gin.Context) {
 
 	ratio := req.Ratio
 	if ratio == "" {
-		ratio = "768:1280" // Portrait (Reels/TikTok-friendly default)
+		ratio = "720:1280" // Portrait (Reels/TikTok-friendly default)
 	}
 
 	// gen4_turbo is an image-to-video model — a starting frame is required.
