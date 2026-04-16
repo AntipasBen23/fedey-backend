@@ -14,6 +14,7 @@ type SocialAccount struct {
 	AccessToken      string         `json:"accessToken"`
 	AutoPilotEnabled bool           `gorm:"default:false" json:"autoPilotEnabled"`
 	SchedulingConfig string         `json:"schedulingConfig"` // JSON string for Mode, Staggering, etc.
+	FollowerCount    int            `json:"followerCount"`     // Last synced follower count
 	CreatedAt        time.Time      `json:"createdAt"`
 	UpdatedAt        time.Time      `json:"updatedAt"`
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
@@ -61,6 +62,7 @@ type PostAnalytics struct {
 	ScheduledPostID uint           `gorm:"index" json:"scheduledPostId"`
 	Likes           int            `json:"likes"`
 	Reposts         int            `json:"reposts"`
+	Comments        int            `json:"comments"`
 	Impressions     int            `json:"impressions"`
 	EngagementRate  float64        `json:"engagementRate"`
 	ImpactScore     int            `json:"impactScore"` // 1-100 calculated by AI

@@ -14,7 +14,8 @@ type DashboardData struct {
 	SocialAccounts []models.SocialAccount `json:"socialAccounts"`
 	Strategy       *models.UserStrategy   `json:"strategy"`
 	Stats          map[string]interface{} `json:"stats"`
-	Plan           string                 `json:"plan"` // "free" | "pro"
+	Plan           string                 `json:"plan"`      // "free" | "pro"
+	Analytics      AnalyticsOverview      `json:"analytics"` // live metrics
 }
 
 func GetDashboardHandler(c *gin.Context) {
@@ -67,5 +68,6 @@ func GetDashboardHandler(c *gin.Context) {
 		Strategy:       &strategy,
 		Stats:          stats,
 		Plan:           plan,
+		Analytics:      buildAnalyticsOverview(),
 	})
 }
