@@ -172,6 +172,15 @@ func GenerateVideoHandler(c *gin.Context) {
 		return
 	}
 
+	// AI video generation is a Pro-only feature
+	if !IsPro() {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":    "AI video generation requires a Pro plan.",
+			"upgradeTo": "pro",
+		})
+		return
+	}
+
 	if os.Getenv("RUNWAY_API_KEY") == "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "Video generation is not configured. Set RUNWAY_API_KEY to enable this feature.",

@@ -62,7 +62,11 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Carousel Image Generation (DALL-E 3)
 		v1.POST("/carousel/images", handlers.GenerateCarouselImagesHandler)
 
-		// Video Generation — template (FFmpeg, free) and AI (Runway ML)
+		// Plan management
+		v1.GET("/plan", handlers.GetPlanHandler)
+		v1.POST("/plan/upgrade", handlers.UpgradePlanHandler)
+
+		// Video Generation — template (FFmpeg, free) and AI (Runway ML, pro only)
 		v1.POST("/video/template", handlers.GenerateTemplateVideoHandler)
 		v1.POST("/video/generate", handlers.GenerateVideoHandler)
 		v1.GET("/video/status/:taskId", handlers.GetVideoStatusHandler)

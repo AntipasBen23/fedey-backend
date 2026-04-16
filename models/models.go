@@ -89,6 +89,8 @@ type UserStrategy struct {
 type UserPreferences struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	Config    string         `json:"config"`
+	// Plan controls feature access: "free" (default) or "pro"
+	Plan      string         `gorm:"default:'free'" json:"plan"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

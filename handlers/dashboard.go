@@ -14,6 +14,7 @@ type DashboardData struct {
 	SocialAccounts []models.SocialAccount `json:"socialAccounts"`
 	Strategy       *models.UserStrategy   `json:"strategy"`
 	Stats          map[string]interface{} `json:"stats"`
+	Plan           string                 `json:"plan"` // "free" | "pro"
 }
 
 func GetDashboardHandler(c *gin.Context) {
@@ -54,11 +55,17 @@ func GetDashboardHandler(c *gin.Context) {
 		"impactScore":       "92%",
 	}
 
+	plan := "free"
+	if IsPro() {
+		plan = "pro"
+	}
+
 	c.JSON(http.StatusOK, DashboardData{
 		Calendar:       scheduledPosts,
 		History:        history,
 		SocialAccounts: accounts,
 		Strategy:       &strategy,
 		Stats:          stats,
+		Plan:           plan,
 	})
 }
