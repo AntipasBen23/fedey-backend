@@ -13,6 +13,7 @@ type SocialAccount struct {
 	AccountType      string         `gorm:"uniqueIndex:idx_platform_context" json:"accountType"` // 'old' or 'new'
 	AccessToken      string         `json:"accessToken"`
 	AutoPilotEnabled bool           `gorm:"default:false" json:"autoPilotEnabled"`
+	GhostModeEnabled bool           `gorm:"default:false" json:"ghostModeEnabled"`
 	SchedulingConfig string         `json:"schedulingConfig"` // JSON string for Mode, Staggering, etc.
 	FollowerCount    int            `json:"followerCount"`     // Last synced follower count
 	CreatedAt        time.Time      `json:"createdAt"`
@@ -106,4 +107,20 @@ type UserPreferences struct {
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// EngagementEvent tracks find-and-reply social listening events
+type EngagementEvent struct {
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	AccountID       uint           `json:"accountId"`
+	Platform        string         `json:"platform"`
+	Type            string         `json:"type"` // 'mention', 'niche_discovery', 'comment_on_self'
+	ExternalPostID  string         `json:"externalPostId"`
+	AuthorHandle    string         `json:"authorHandle"`
+	OriginalContent string         `json:"originalContent"`
+	ProposedReply   string         `json:"proposedReply"`
+	Status          string         `gorm:"default:'pending'" json:"status"` // 'pending', 'sent', 'ignored'
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }

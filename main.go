@@ -60,6 +60,11 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Conversational AI
 		v1.POST("/chat", handlers.ChatWithFurciHandler)
 
+		// Engagement & Ghost Operator
+		v1.GET("/engagements", handlers.GetEngagementsHandler)
+		v1.POST("/engagements/:id/approve", handlers.ApproveEngagementHandler)
+		v1.POST("/settings/ghost-mode", handlers.ToggleGhostModeHandler)
+
 		// Script Engine (video scripts, carousels, threads)
 		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
 

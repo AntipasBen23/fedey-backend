@@ -32,6 +32,7 @@ func InitDB() {
 		&models.PostAnalytics{},
 		&models.UserPreferences{},
 		&models.FollowerSnapshot{},
+		&models.EngagementEvent{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database: %v", err)
