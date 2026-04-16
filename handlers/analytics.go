@@ -13,6 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ensure models is used (FollowerSnapshot is referenced in sync handler)
+var _ = models.FollowerSnapshot{}
+
 // ─── Overview types (shared with dashboard) ───────────────────────────────────
 
 type PostPerformance struct {
@@ -28,15 +31,22 @@ type PostPerformance struct {
 	PostedAt    string  `json:"postedAt"`
 }
 
+type FollowerPoint struct {
+	Date  string `json:"date"`  // "Apr 12"
+	Count int    `json:"count"`
+}
+
 type AnalyticsOverview struct {
 	FollowerCount    int               `json:"followerCount"`
+	FollowerGrowth   int               `json:"followerGrowth"`   // change vs 30 days ago
 	TotalImpressions int               `json:"totalImpressions"`
 	TotalReactions   int               `json:"totalReactions"`   // likes + reposts + comments
 	AvgEngRate       float64           `json:"avgEngRate"`
 	PostsAnalyzed    int               `json:"postsAnalyzed"`
 	TopPosts         []PostPerformance `json:"topPosts"`
-	LastSynced       string            `json:"lastSynced"` // ISO string or ""
-	Insight          string            `json:"insight"`    // rule-based growth tip
+	FollowerHistory  []FollowerPoint   `json:"followerHistory"`  // last 30 days
+	LastSynced       string            `json:"lastSynced"`
+	Insight          string            `json:"insight"`
 }
 
 // ─── GET /v1/analytics ────────────────────────────────────────────────────────
@@ -123,6 +133,29 @@ func buildAnalyticsOverview() AnalyticsOverview {
 		})
 	}
 
+	// Follower growth history — last 30 daily snapshots
+	var snapshots []models.FollowerSnapshot
+	database.DB.Where("date >= ?", time.Now().AddDate(0, 0, -30).Format("2006-01-02")).
+		Order("date asc").
+		Find(&snapshots)
+
+	for _, s := range snapshots {
+		t, err := time.Parse("2006-01-02", s.Date)
+		label := s.Date
+		if err == nil {
+			label = t.Format("Jan 2")
+		}
+		overview.FollowerHistory = append(overview.FollowerHistory, FollowerPoint{
+			Date:  label,
+			Count: s.Count,
+		})
+	}
+
+	// Growth vs oldest snapshot in window
+	if len(snapshots) >= 2 {
+		overview.FollowerGrowth = snapshots[len(snapshots)-1].Count - snapshots[0].Count
+	}
+
 	overview.Insight = generateInsight(overview)
 	return overview
 }
@@ -166,9 +199,20 @@ func SyncAnalyticsHandler(c *gin.Context) {
 		return
 	}
 
-	// Persist updated follower count
+	// Persist updated follower count on the account row
 	database.DB.Model(&account).Update("follower_count", followerCount)
 	log.Printf("[Analytics] Follower count: %d", followerCount)
+
+	// Save daily snapshot (one per day — upsert by date + platform)
+	today := time.Now().Format("2006-01-02")
+	snapshot := models.FollowerSnapshot{
+		Date:     today,
+		Platform: account.Platform,
+		Count:    followerCount,
+	}
+	database.DB.Where("date = ? AND platform = ?", today, account.Platform).
+		Assign(snapshot).
+		FirstOrCreate(&snapshot)
 
 	// 2. Fetch recent tweet metrics
 	tweets, tweetsErr := fetchTwitterTweetMetrics(account.AccessToken, userID)

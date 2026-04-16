@@ -88,6 +88,16 @@ type UserStrategy struct {
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// FollowerSnapshot stores one daily follower count reading per platform.
+// Used to power the follower growth chart on the dashboard.
+type FollowerSnapshot struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Date      string    `gorm:"uniqueIndex:idx_snapshot_date_platform" json:"date"` // "2026-04-16"
+	Platform  string    `gorm:"uniqueIndex:idx_snapshot_date_platform" json:"platform"`
+	Count     int       `json:"count"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type UserPreferences struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	Config    string         `json:"config"`
