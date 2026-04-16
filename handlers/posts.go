@@ -1,14 +1,25 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
+	"github.com/sashabaranov/go-openai"
 )
+
+type UpdatePostRequest struct {
+	Content       string `json:"content"`
+	ScheduledAt   string `json:"scheduledAt"`
+	VideoURL      string `json:"videoUrl"`
+	ImageURLsJSON string `json:"imageUrlsJSON"`
+}
 
 type CreatePostRequest struct {
 	Content     string   `json:"content"`
