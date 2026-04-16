@@ -19,19 +19,31 @@ import (
 )
 
 const (
-	SlideW = 1080
-	SlideH = 1920
+	SlideW    = 1080
+	SlideH    = 1920
+	CarouselW = 1080
+	CarouselH = 1080
 )
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // Slide is a single frame in the template video.
 type Slide struct {
-	Text     string  // main headline text
-	SubText  string  // smaller supporting text (hashtags, CTA sub-line)
-	Duration float64 // seconds this slide stays on screen
-	BgHex    string  // background hex colour without "#", e.g. "0d1117"
-	FontSize float64 // 0 → auto-sized based on text length
+	Text        string  // main headline text
+	SubText     string  // smaller supporting text (hashtags, CTA sub-line)
+	Duration    float64 // seconds this slide stays on screen
+	BgHex       string  // background hex colour without "#", e.g. "0d1117"
+	BgVideoPath string  // optional: path to a downloaded stock footage clip
+	FontSize    float64 // 0 → auto-sized based on text length
+}
+
+// CarouselSlide is a single designed image for a carousel post.
+type CarouselSlide struct {
+	Title      string // large headline (hook or point)
+	Body       string // supporting copy (optional)
+	SlideNum   int    // 1-based slide number
+	TotalSlides int
+	BgHex      string
 }
 
 // TemplateVideoSpec describes the full video to be assembled.
@@ -127,16 +139,28 @@ func BuildTemplateVideo(ctx context.Context, spec TemplateVideoSpec) error {
 
 	var clipPaths []string
 	for i, slide := range spec.Slides {
-		pngPath := filepath.Join(tmpDir, fmt.Sprintf("slide_%d.png", i))
 		clipPath := filepath.Join(tmpDir, fmt.Sprintf("clip_%d.mp4", i))
 
-		if err := renderSlide(slide, font, pngPath); err != nil {
-			return fmt.Errorf("render slide %d: %w", i, err)
+		// Try video background; if it fails clear the path so we fall through to PNG.
+		if slide.BgVideoPath != "" {
+			if err := buildVideoSlide(ctx, slide, font, i, tmpDir, clipPath); err != nil {
+				log.Printf("[Video] Video slide %d failed, falling back to solid bg: %v", i, err)
+				slide.BgVideoPath = ""
+			}
 		}
-		if err := pngToClip(ctx, pngPath, slide.Duration, clipPath); err != nil {
-			return fmt.Errorf("encode clip %d: %w", i, err)
+
+		// Solid-colour PNG path — used when there is no stock clip (or it failed).
+		if slide.BgVideoPath == "" {
+			pngPath := filepath.Join(tmpDir, fmt.Sprintf("slide_%d.png", i))
+			if err := renderSlide(slide, font, pngPath); err != nil {
+				return fmt.Errorf("render slide %d: %w", i, err)
+			}
+			if err := pngToClip(ctx, pngPath, slide.Duration, clipPath); err != nil {
+				return fmt.Errorf("encode clip %d: %w", i, err)
+			}
+			os.Remove(pngPath)
 		}
-		os.Remove(pngPath) // PNG no longer needed
+
 		clipPaths = append(clipPaths, clipPath)
 	}
 
@@ -292,6 +316,216 @@ func runFFmpeg(ctx context.Context, args []string) error {
 		return fmt.Errorf("ffmpeg error: %w\noutput:\n%s", err, string(out))
 	}
 	return nil
+}
+
+// ─── Video background slide ───────────────────────────────────────────────────
+
+// buildVideoSlide overlays text on a stock footage clip using FFmpeg's
+// drawtext filter. Text is written to temp files to avoid filter-graph
+// escaping problems with special characters.
+func buildVideoSlide(ctx context.Context, s Slide, font string, index int, tmpDir, outputPath string) error {
+	fontSize := s.FontSize
+	if fontSize == 0 {
+		fontSize = autoFontSize(s.Text)
+	}
+
+	// Pre-wrap text so lines aren't too wide on screen
+	maxChars := 20
+	if fontSize < 60 {
+		maxChars = 28
+	}
+	mainText := wrapText(s.Text, maxChars)
+
+	// Write text to temp files — sidesteps all FFmpeg filter escaping
+	mainFile := filepath.Join(tmpDir, fmt.Sprintf("vtxt_main_%d.txt", index))
+	if err := os.WriteFile(mainFile, []byte(mainText), 0644); err != nil {
+		return err
+	}
+	defer os.Remove(mainFile)
+
+	wmFile := filepath.Join(tmpDir, fmt.Sprintf("vtxt_wm_%d.txt", index))
+	os.WriteFile(wmFile, []byte("furciai.com"), 0644)
+	defer os.Remove(wmFile)
+
+	// Escape the font path for FFmpeg filter (colons must be \:)
+	escapedFont := strings.ReplaceAll(font, ":", "\\:")
+	escapedMain := strings.ReplaceAll(mainFile, ":", "\\:")
+	escapedWM := strings.ReplaceAll(wmFile, ":", "\\:")
+
+	filters := []string{
+		// Crop + scale to portrait
+		"scale=1080:1920:force_original_aspect_ratio=increase",
+		"crop=1080:1920",
+		// Darken footage so white text is readable
+		"eq=brightness=-0.30:saturation=0.75",
+		// Semi-transparent dark band in the middle for extra contrast
+		"drawbox=x=0:y=700:w=iw:h=520:color=black@0.45:t=fill",
+		// Indigo accent bar at top
+		"drawbox=x=0:y=0:w=iw:h=10:color=0x6366f1@1.0:t=fill",
+		// Main text
+		fmt.Sprintf(
+			"drawtext=fontfile=%s:textfile=%s:fontsize=%.0f:fontcolor=white:"+
+				"x=(w-tw)/2:y=(h-th)/2-30:line_spacing=18:"+
+				"shadowcolor=black@0.8:shadowx=3:shadowy=3",
+			escapedFont, escapedMain, fontSize,
+		),
+		// Brand watermark
+		fmt.Sprintf(
+			"drawtext=fontfile=%s:textfile=%s:fontsize=28:fontcolor=white@0.30:"+
+				"x=(w-tw)/2:y=h-50",
+			escapedFont, escapedWM,
+		),
+	}
+
+	// Optional subtext
+	if s.SubText != "" {
+		subFile := filepath.Join(tmpDir, fmt.Sprintf("vtxt_sub_%d.txt", index))
+		os.WriteFile(subFile, []byte(s.SubText), 0644)
+		defer os.Remove(subFile)
+		escapedSub := strings.ReplaceAll(subFile, ":", "\\:")
+		filters = append(filters,
+			fmt.Sprintf(
+				"drawtext=fontfile=%s:textfile=%s:fontsize=38:fontcolor=white@0.70:"+
+					"x=(w-tw)/2:y=h*0.72:line_spacing=14:"+
+					"shadowcolor=black@0.6:shadowx=2:shadowy=2",
+				escapedFont, escapedSub,
+			),
+		)
+	}
+
+	args := []string{
+		"-y",
+		"-i", s.BgVideoPath,
+		"-t", fmt.Sprintf("%.2f", s.Duration),
+		"-vf", strings.Join(filters, ","),
+		"-r", "30",
+		"-c:v", "libx264",
+		"-pix_fmt", "yuv420p",
+		"-preset", "fast",
+		outputPath,
+	}
+	return runFFmpeg(ctx, args)
+}
+
+// wrapText breaks text into lines of at most maxChars characters,
+// splitting at word boundaries.
+func wrapText(text string, maxChars int) string {
+	words := strings.Fields(text)
+	var lines []string
+	var current strings.Builder
+	for _, word := range words {
+		if current.Len() > 0 && current.Len()+1+len(word) > maxChars {
+			lines = append(lines, current.String())
+			current.Reset()
+		}
+		if current.Len() > 0 {
+			current.WriteByte(' ')
+		}
+		current.WriteString(word)
+	}
+	if current.Len() > 0 {
+		lines = append(lines, current.String())
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ─── Carousel slide rendering ─────────────────────────────────────────────────
+
+// RenderCarouselSlide renders a single 1080×1080 PNG carousel slide using gg.
+// Returns the path to the saved PNG.
+func RenderCarouselSlide(s CarouselSlide, outputPath string) error {
+	font := fontPath()
+	if font == "" {
+		return fmt.Errorf("no font available")
+	}
+
+	dc := gg.NewContext(CarouselW, CarouselH)
+
+	// Background
+	dc.SetColor(parseHex(s.BgHex, color.RGBA{13, 17, 23, 255}))
+	dc.Clear()
+
+	// Gradient overlay — bottom quarter darkens slightly
+	for y := CarouselH * 3 / 4; y < CarouselH; y++ {
+		alpha := float64(y-CarouselH*3/4) / float64(CarouselH/4) * 0.4
+		dc.SetRGBA(0, 0, 0, alpha)
+		dc.DrawLine(0, float64(y), float64(CarouselW), float64(y))
+		dc.Stroke()
+	}
+
+	// Top accent bar
+	dc.SetColor(color.RGBA{99, 102, 241, 255})
+	dc.DrawRectangle(0, 0, float64(CarouselW), 8)
+	dc.Fill()
+
+	// Slide counter  (e.g. "2 / 5")
+	if s.TotalSlides > 0 {
+		if err := dc.LoadFontFace(font, 28); err == nil {
+			counter := fmt.Sprintf("%d / %d", s.SlideNum, s.TotalSlides)
+			dc.SetRGBA(1, 1, 1, 0.45)
+			dc.DrawStringAnchored(counter, float64(CarouselW)-40, 40, 1, 0.5)
+		}
+	}
+
+	// Title text
+	if s.Title != "" {
+		fontSize := carouselFontSize(s.Title, s.Body != "")
+		if err := dc.LoadFontFace(font, fontSize); err == nil {
+			dc.SetColor(color.White)
+			yPos := float64(CarouselH) / 2
+			if s.Body != "" {
+				yPos = float64(CarouselH) * 0.38
+			}
+			dc.DrawStringWrapped(
+				s.Title,
+				float64(CarouselW)/2, yPos,
+				0.5, 0.5,
+				float64(CarouselW)*0.85,
+				1.45,
+				gg.AlignCenter,
+			)
+		}
+	}
+
+	// Body text (supporting copy)
+	if s.Body != "" {
+		if err := dc.LoadFontFace(font, 38); err == nil {
+			dc.SetRGBA(1, 1, 1, 0.75)
+			dc.DrawStringWrapped(
+				s.Body,
+				float64(CarouselW)/2, float64(CarouselH)*0.70,
+				0.5, 0.5,
+				float64(CarouselW)*0.80,
+				1.4,
+				gg.AlignCenter,
+			)
+		}
+	}
+
+	// Brand watermark
+	if err := dc.LoadFontFace(font, 24); err == nil {
+		dc.SetRGBA(1, 1, 1, 0.28)
+		dc.DrawStringAnchored("furciai.com", float64(CarouselW)/2, float64(CarouselH)-30, 0.5, 0.5)
+	}
+
+	return dc.SavePNG(outputPath)
+}
+
+func carouselFontSize(title string, hasBody bool) float64 {
+	base := 72.0
+	if hasBody {
+		base = 62.0
+	}
+	switch {
+	case len(title) <= 30:
+		return base
+	case len(title) <= 60:
+		return base - 10
+	case len(title) <= 100:
+		return base - 20
+	default:
+		return base - 28
+	}
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

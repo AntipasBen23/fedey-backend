@@ -82,6 +82,21 @@ func GenerateTemplateVideoHandler(c *gin.Context) {
 
 	log.Printf("[TemplateVideo] Building %d slides for post %d (type=%s)", len(slides), post.ID, post.ContentType)
 
+	// If Pexels is configured, fetch a stock footage clip for each slide.
+	// Clips are downloaded into tmpDir and referenced by BgVideoPath.
+	if video.PexelsEnabled() {
+		for i := range slides {
+			query := video.SearchQuery(slides[i].Text)
+			clipPath := filepath.Join(tmpDir, fmt.Sprintf("stock_%d.mp4", i))
+			if err := video.FetchStockClip(ctx, query, clipPath, slides[i].Duration+2); err != nil {
+				log.Printf("[TemplateVideo] Pexels clip %d skipped (%q): %v", i, query, err)
+			} else {
+				slides[i].BgVideoPath = clipPath
+				log.Printf("[TemplateVideo] Pexels clip %d fetched for %q", i, query)
+			}
+		}
+	}
+
 	if err := video.BuildTemplateVideo(ctx, video.TemplateVideoSpec{
 		Slides:     slides,
 		OutputPath: outputPath,

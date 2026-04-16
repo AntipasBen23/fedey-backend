@@ -59,8 +59,9 @@ v1.POST("/revise", handlers.ReviseHandler)
 		// Script Engine (video scripts, carousels, threads)
 		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
 
-		// Carousel Image Generation (DALL-E 3)
+		// Carousel Image Generation (DALL-E 3) and Carousel Design (FFmpeg)
 		v1.POST("/carousel/images", handlers.GenerateCarouselImagesHandler)
+		v1.POST("/carousel/design", handlers.GenerateCarouselDesignHandler)
 
 		// Plan management
 		v1.GET("/plan", handlers.GetPlanHandler)
