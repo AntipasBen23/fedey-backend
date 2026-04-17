@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -9,7 +10,6 @@ import (
 	"log"
 	"math/big"
 	"net/http"
-	"net/smtp"
 	"os"
 	"regexp"
 	"strings"
@@ -113,32 +113,51 @@ func issueRefreshToken(userID uint, rememberMe bool) (string, time.Time, error) 
 	return token, exp, nil
 }
 
-// ─── Email helper ─────────────────────────────────────────────────────────────
+// ─── Email helper (Resend) ────────────────────────────────────────────────────
 
-var emailOnce sync.Once
-var emailConfigured bool
-
-func sendEmail(to, subject, body string) error {
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
-	user := os.Getenv("SMTP_USER")
-	pass := os.Getenv("SMTP_PASS")
-	from := os.Getenv("SMTP_FROM")
-
-	if host == "" || user == "" || pass == "" {
-		log.Printf("[Email] SMTP not configured — would have sent to %s: %s", to, subject)
+// sendEmail sends an HTML email via the Resend API.
+// Requires RESEND_API_KEY and optionally RESEND_FROM (defaults to onboarding@resend.dev for testing).
+func sendEmail(to, subject, htmlBody string) error {
+	apiKey := os.Getenv("RESEND_API_KEY")
+	if apiKey == "" {
+		log.Printf("[Email] RESEND_API_KEY not set — would have sent to %s: %s", to, subject)
 		return nil // non-fatal in dev
 	}
+
+	from := os.Getenv("RESEND_FROM")
 	if from == "" {
-		from = user
-	}
-	if port == "" {
-		port = "587"
+		from = "Furci.ai <onboarding@resend.dev>"
 	}
 
-	msg := fmt.Sprintf("From: Furci.ai <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
-	auth := smtp.PlainAuth("", user, pass, host)
-	return smtp.SendMail(host+":"+port, auth, from, []string{to}, []byte(msg))
+	payload := map[string]interface{}{
+		"from":    from,
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Resend API error %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
 }
 
 func sendVerificationEmail(email, name, code string) {
