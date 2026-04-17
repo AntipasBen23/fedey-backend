@@ -34,6 +34,7 @@ func main() {
 		v1.POST("/track", handlers.TrackPageViewHandler)
 
 		// ── Admin auth (public) ─────────────────────────────────────────────
+		v1.POST("/admin/setup", handlers.AdminSetupHandler) // one-time account creation
 		v1.POST("/admin/login", handlers.AdminLoginHandler)
 
 		// ── Admin protected routes ──────────────────────────────────────────

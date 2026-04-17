@@ -36,6 +36,78 @@ func issueAdminToken(userID uint, email string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(adminSecret())
 }
 
+// ─── POST /v1/admin/setup ────────────────────────────────────────────────────
+// One-time endpoint to create the admin account. Locked behind ADMIN_SECRET.
+// Once the account exists, this endpoint becomes a no-op (returns 409).
+
+type AdminSetupRequest struct {
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Name     string `json:"name"`
+	AdminKey string `json:"adminKey" binding:"required"`
+}
+
+func AdminSetupHandler(c *gin.Context) {
+	var req AdminSetupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email, password, and adminKey are required."})
+		return
+	}
+
+	adminKey := os.Getenv("ADMIN_SECRET")
+	if adminKey == "" || req.AdminKey != adminKey {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid admin key."})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Name == "" {
+		req.Name = "Admin"
+	}
+
+	// If account already exists, just return success (idempotent)
+	var existing models.User
+	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
+		// Already exists — issue token directly if password matches
+		if err := bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte(req.Password)); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Account already exists. Use /v1/admin/login to sign in."})
+			return
+		}
+		token, _ := issueAdminToken(existing.ID, existing.Email)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Account already set up. Here's your admin token.",
+			"token":   token,
+			"admin":   gin.H{"id": existing.ID, "name": existing.Name, "email": existing.Email},
+		})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Setup failed."})
+		return
+	}
+
+	user := models.User{
+		Name:         req.Name,
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		IsVerified:   true, // admin account is pre-verified
+		Plan:         "pro",
+	}
+	if err := database.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create admin account."})
+		return
+	}
+
+	token, _ := issueAdminToken(user.ID, user.Email)
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Admin account created successfully.",
+		"token":   token,
+		"admin":   gin.H{"id": user.ID, "name": user.Name, "email": user.Email},
+	})
+}
+
 // ─── POST /v1/admin/login ────────────────────────────────────────────────────
 
 type AdminLoginRequest struct {
