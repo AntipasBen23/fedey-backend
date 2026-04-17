@@ -563,24 +563,40 @@ func GoogleAuthHandler(c *gin.Context) {
 
 	gData.Email = strings.ToLower(strings.TrimSpace(gData.Email))
 
-	// Find or create user
+	// Find or create user — also check soft-deleted records to avoid duplicate-key errors
 	var user models.User
 	result := database.DB.Where("email = ?", gData.Email).First(&user)
 	if result.Error != nil {
-		// New user via Google
-		user = models.User{
-			Name:       gData.Name,
-			Email:      gData.Email,
-			GoogleID:   gData.Sub,
-			IsVerified: true, // Google already verified their email
-			Plan:       "free",
-		}
-		if err := database.DB.Create(&user).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
-			return
+		// Check if a soft-deleted record exists for this email
+		var deleted models.User
+		if database.DB.Unscoped().Where("email = ?", gData.Email).First(&deleted).Error == nil {
+			// Restore the soft-deleted account and link Google
+			if err := database.DB.Unscoped().Model(&deleted).Updates(map[string]interface{}{
+				"deleted_at": nil,
+				"google_id":  gData.Sub,
+				"is_verified": true,
+				"name":       gData.Name,
+			}).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				return
+			}
+			user = deleted
+		} else {
+			// Truly new user via Google
+			user = models.User{
+				Name:       gData.Name,
+				Email:      gData.Email,
+				GoogleID:   gData.Sub,
+				IsVerified: true,
+				Plan:       "free",
+			}
+			if err := database.DB.Create(&user).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				return
+			}
 		}
 	} else if user.GoogleID == "" {
-		// Existing email-password user linking Google
+		// Existing email-password user — link Google to their account
 		database.DB.Model(&user).Updates(map[string]interface{}{"google_id": gData.Sub, "is_verified": true})
 	}
 
