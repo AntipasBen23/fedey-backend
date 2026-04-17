@@ -44,19 +44,12 @@ type AdminSetupRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Name     string `json:"name"`
-	AdminKey string `json:"adminKey" binding:"required"`
 }
 
 func AdminSetupHandler(c *gin.Context) {
 	var req AdminSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email, password, and adminKey are required."})
-		return
-	}
-
-	adminKey := os.Getenv("ADMIN_SECRET")
-	if adminKey == "" || req.AdminKey != adminKey {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid admin key."})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required."})
 		return
 	}
 
@@ -113,20 +106,12 @@ func AdminSetupHandler(c *gin.Context) {
 type AdminLoginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	AdminKey string `json:"adminKey" binding:"required"`
 }
 
 func AdminLoginHandler(c *gin.Context) {
 	var req AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email, password, and admin key are required."})
-		return
-	}
-
-	// Verify admin key first
-	adminKey := os.Getenv("ADMIN_SECRET")
-	if adminKey == "" || req.AdminKey != adminKey {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid admin key."})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and password are required."})
 		return
 	}
 
