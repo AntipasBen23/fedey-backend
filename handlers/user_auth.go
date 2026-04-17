@@ -600,6 +600,11 @@ func GoogleAuthHandler(c *gin.Context) {
 		database.DB.Model(&user).Updates(map[string]interface{}{"google_id": gData.Sub, "is_verified": true})
 	}
 
+	// Update last login timestamp
+	now := time.Now()
+	database.DB.Model(&user).Update("last_login_at", now)
+	user.LastLoginAt = &now
+
 	access, err := issueAccessToken(user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed."})
