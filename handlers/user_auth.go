@@ -448,6 +448,10 @@ func LoginHandler(c *gin.Context) {
 
 	clearLoginAttempts(req.Email)
 
+	// Record last login time
+	now := time.Now()
+	database.DB.Model(&user).Update("last_login_at", now)
+
 	access, err := issueAccessToken(user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed. Please try again."})

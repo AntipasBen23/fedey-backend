@@ -30,6 +30,25 @@ func main() {
 
 	v1 := r.Group("/v1")
 	{
+		// ── Page tracking (public) ─────────────────────────────────────────
+		v1.POST("/track", handlers.TrackPageViewHandler)
+
+		// ── Admin auth (public) ─────────────────────────────────────────────
+		v1.POST("/admin/login", handlers.AdminLoginHandler)
+
+		// ── Admin protected routes ──────────────────────────────────────────
+		admin := v1.Group("/admin", middleware.RequireAdmin())
+		{
+			admin.GET("/stats", handlers.AdminStatsHandler)
+			admin.GET("/users", handlers.AdminListUsersHandler)
+			admin.DELETE("/users/:id", handlers.AdminDeleteUserHandler)
+			admin.PATCH("/users/:id/plan", handlers.AdminUpdateUserPlanHandler)
+			admin.GET("/visitors/timeline", handlers.AdminVisitorTimelineHandler)
+			admin.GET("/visitors/top-pages", handlers.AdminTopPagesHandler)
+			admin.GET("/visitors/devices", handlers.AdminDevicesHandler)
+			admin.GET("/activity", handlers.AdminActivityHandler)
+		}
+
 		// ── Public auth routes ──────────────────────────────────────────────
 		v1.POST("/user/register", handlers.RegisterHandler)
 		v1.POST("/user/verify-email", handlers.VerifyEmailHandler)

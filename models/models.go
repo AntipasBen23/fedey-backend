@@ -122,9 +122,21 @@ type User struct {
 	Plan          string         `gorm:"default:'free'" json:"plan"`
 	LoginAttempts int            `gorm:"default:0" json:"-"`
 	LockedUntil   *time.Time     `json:"-"`
+	LastLoginAt   *time.Time     `json:"lastLoginAt"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// PageView records a single page visit for analytics.
+type PageView struct {
+	ID         uint      `gorm:"primaryKey"`
+	Path       string    `gorm:"index;not null"`
+	Referrer   string
+	DeviceType string    // "mobile" | "tablet" | "desktop"
+	SessionID  string    `gorm:"index"`
+	UserID     *uint     `gorm:"index"` // nil = anonymous visitor
+	CreatedAt  time.Time `gorm:"index"`
 }
 
 // EmailVerification holds a one-time 6-digit code for verifying a new user's email.
