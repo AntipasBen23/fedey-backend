@@ -58,17 +58,18 @@ func AdminSetupHandler(c *gin.Context) {
 		req.Name = "Admin"
 	}
 
-	// If account already exists, just return success (idempotent)
+	// If account already exists, update the password (allows password reset)
 	var existing models.User
 	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
-		// Already exists — issue token directly if password matches
-		if err := bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte(req.Password)); err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "Account already exists. Use /v1/admin/login to sign in."})
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Setup failed."})
 			return
 		}
+		database.DB.Model(&existing).Update("password_hash", string(hash))
 		token, _ := issueAdminToken(existing.ID, existing.Email)
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Account already set up. Here's your admin token.",
+			"message": "Password updated. You can now log in.",
 			"token":   token,
 			"admin":   gin.H{"id": existing.ID, "name": existing.Name, "email": existing.Email},
 		})
