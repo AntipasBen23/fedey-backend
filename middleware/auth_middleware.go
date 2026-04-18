@@ -5,11 +5,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/AntipasBen23/fedey-backend/database"
+	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// RequireAuth validates the Bearer JWT and sets "userID" + "userEmail" in the context.
+// RequireAuth validates the Bearer JWT and confirms the user still exists in the DB.
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -50,6 +52,13 @@ func RequireAuth() gin.HandlerFunc {
 
 		userID := uint(claims["sub"].(float64))
 		email, _ := claims["email"].(string)
+
+		// Confirm the user still exists — if deleted via admin, reject immediately
+		var user models.User
+		if database.DB.First(&user, userID).Error != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Account no longer exists.", "deleted": true})
+			return
+		}
 
 		c.Set("userID", userID)
 		c.Set("userEmail", email)
