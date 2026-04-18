@@ -21,7 +21,9 @@ func main() {
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		// Explicit origins are required when AllowCredentials is true —
+		// browsers reject "*" with credentials per the CORS spec.
+		AllowOrigins:     []string{"https://furciai.com", "https://www.furciai.com", "http://localhost:3000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -61,8 +63,9 @@ func main() {
 		v1.POST("/user/reset-password", handlers.ResetPasswordHandler)
 		v1.POST("/user/logout", handlers.LogoutHandler)
 
-		// ── Protected user route ────────────────────────────────────────────
+		// ── Protected user routes ───────────────────────────────────────────
 		v1.GET("/user/me", middleware.RequireAuth(), handlers.GetMeHandler)
+		v1.PATCH("/user/onboarding", middleware.RequireAuth(), handlers.UpdateOnboardingHandler)
 
 		// ── Existing routes (kept open for now — add RequireAuth() as needed) ─
 		v1.POST("/analyze", handlers.AnalyzeHandler)

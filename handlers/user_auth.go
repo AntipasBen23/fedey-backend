@@ -24,6 +24,46 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// ─── httpOnly cookie helpers ──────────────────────────────────────────────────
+
+// cookieAttrs returns security attributes for auth cookies.
+// Production (GIN_MODE=release): SameSite=None; Secure — required for cross-origin (furciai.com ↔ railway.app).
+// Development: SameSite=Lax — works over plain HTTP without Secure flag.
+func cookieAttrs() string {
+	if os.Getenv("GIN_MODE") == "release" {
+		return "; HttpOnly; Secure; SameSite=None"
+	}
+	return "; HttpOnly; SameSite=Lax"
+}
+
+// setAuthCookies writes the access + refresh tokens as httpOnly cookies on the response.
+func setAuthCookies(c *gin.Context, access, refresh string, refreshExp time.Time) {
+	attrs := cookieAttrs()
+	maxAgeRefresh := int(time.Until(refreshExp).Seconds())
+	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_access=%s; Path=/; Max-Age=900%s", access, attrs))
+	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_refresh=%s; Path=/; Max-Age=%d%s", refresh, maxAgeRefresh, attrs))
+}
+
+// clearAuthCookies expires both auth cookies immediately, logging the user out browser-side.
+func clearAuthCookies(c *gin.Context) {
+	attrs := cookieAttrs()
+	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_access=; Path=/; Max-Age=0%s", attrs))
+	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_refresh=; Path=/; Max-Age=0%s", attrs))
+}
+
+// userJSON returns the standard user payload for auth responses.
+func userJSON(u models.User) gin.H {
+	return gin.H{
+		"id":                 u.ID,
+		"name":               u.Name,
+		"email":              u.Email,
+		"plan":               u.Plan,
+		"jobDescription":     u.JobDescription,
+		"platformContext":    u.PlatformContext,
+		"lastOnboardingStep": u.LastOnboardingStep,
+	}
+}
+
 // ─── Password validation ──────────────────────────────────────────────────────
 
 type passwordError struct{ msg string }
@@ -343,12 +383,10 @@ func VerifyEmailHandler(c *gin.Context) {
 		return
 	}
 
+	setAuthCookies(c, access, refresh, exp)
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "Email verified successfully. Welcome to Furci!",
-		"accessToken":  access,
-		"refreshToken": refresh,
-		"expiresAt":    exp.Unix(),
-		"user": gin.H{"id": user.ID, "name": user.Name, "email": user.Email, "plan": user.Plan},
+		"message": "Email verified successfully. Welcome to Furci!",
+		"user":    userJSON(user),
 	})
 }
 
@@ -463,12 +501,8 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"accessToken":  access,
-		"refreshToken": refresh,
-		"expiresAt":    exp.Unix(),
-		"user": gin.H{"id": user.ID, "name": user.Name, "email": user.Email, "plan": user.Plan},
-	})
+	setAuthCookies(c, access, refresh, exp)
+	c.JSON(http.StatusOK, gin.H{"user": userJSON(user)})
 }
 
 // ─── POST /v1/user/refresh ────────────────────────────────────────────────────
@@ -478,20 +512,29 @@ type RefreshRequest struct {
 }
 
 func RefreshTokenHandler(c *gin.Context) {
-	var req RefreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Refresh token is required."})
+	// Read refresh token from httpOnly cookie (primary) or JSON body (fallback for older clients)
+	refreshTokenStr, _ := c.Cookie("furci_refresh")
+	if refreshTokenStr == "" {
+		var req RefreshRequest
+		if c.ShouldBindJSON(&req) == nil {
+			refreshTokenStr = req.RefreshToken
+		}
+	}
+	if refreshTokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please log in again."})
 		return
 	}
 
 	var rt models.RefreshToken
-	if database.DB.Where("token = ? AND expires_at > ?", req.RefreshToken, time.Now()).First(&rt).Error != nil {
+	if database.DB.Where("token = ? AND expires_at > ?", refreshTokenStr, time.Now()).First(&rt).Error != nil {
+		clearAuthCookies(c)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please log in again."})
 		return
 	}
 
 	var user models.User
 	if database.DB.First(&user, rt.UserID).Error != nil {
+		clearAuthCookies(c)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found."})
 		return
 	}
@@ -511,12 +554,8 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"accessToken":  access,
-		"refreshToken": newRefresh,
-		"expiresAt":    exp.Unix(),
-		"user": gin.H{"id": user.ID, "name": user.Name, "email": user.Email, "plan": user.Plan},
-	})
+	setAuthCookies(c, access, newRefresh, exp)
+	c.JSON(http.StatusOK, gin.H{"user": userJSON(user)})
 }
 
 // ─── POST /v1/user/google ─────────────────────────────────────────────────────
@@ -616,12 +655,8 @@ func GoogleAuthHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"accessToken":  access,
-		"refreshToken": refresh,
-		"expiresAt":    exp.Unix(),
-		"user": gin.H{"id": user.ID, "name": user.Name, "email": user.Email, "plan": user.Plan},
-	})
+	setAuthCookies(c, access, refresh, exp)
+	c.JSON(http.StatusOK, gin.H{"user": userJSON(user)})
 }
 
 // ─── POST /v1/user/forgot-password ───────────────────────────────────────────
@@ -711,11 +746,17 @@ type LogoutRequest struct {
 }
 
 func LogoutHandler(c *gin.Context) {
-	var req LogoutRequest
-	c.ShouldBindJSON(&req)
-	if req.RefreshToken != "" {
-		database.DB.Where("token = ?", req.RefreshToken).Delete(&models.RefreshToken{})
+	// Try cookie first (primary), fall back to JSON body (backwards compat)
+	refreshTokenStr, _ := c.Cookie("furci_refresh")
+	if refreshTokenStr == "" {
+		var req LogoutRequest
+		c.ShouldBindJSON(&req)
+		refreshTokenStr = req.RefreshToken
 	}
+	if refreshTokenStr != "" {
+		database.DB.Where("token = ?", refreshTokenStr).Delete(&models.RefreshToken{})
+	}
+	clearAuthCookies(c)
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully."})
 }
 
@@ -728,10 +769,40 @@ func GetMeHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found."})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"id":    user.ID,
-		"name":  user.Name,
-		"email": user.Email,
-		"plan":  user.Plan,
-	})
+	c.JSON(http.StatusOK, userJSON(user))
+}
+
+// ─── PATCH /v1/user/onboarding ────────────────────────────────────────────────
+
+type UpdateOnboardingRequest struct {
+	JobDescription     *string `json:"jobDescription"`
+	PlatformContext    *string `json:"platformContext"`
+	LastOnboardingStep *string `json:"lastOnboardingStep"`
+}
+
+func UpdateOnboardingHandler(c *gin.Context) {
+	userID, _ := c.Get("userID")
+
+	var req UpdateOnboardingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request."})
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.JobDescription != nil {
+		updates["job_description"] = *req.JobDescription
+	}
+	if req.PlatformContext != nil {
+		updates["platform_context"] = *req.PlatformContext
+	}
+	if req.LastOnboardingStep != nil {
+		updates["last_onboarding_step"] = *req.LastOnboardingStep
+	}
+
+	if len(updates) > 0 {
+		database.DB.Model(&models.User{}).Where("id = ?", userID).Updates(updates)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

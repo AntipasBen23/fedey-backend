@@ -11,16 +11,30 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// RequireAuth validates the Bearer JWT and confirms the user still exists in the DB.
+// RequireAuth validates the JWT and confirms the user still exists in the DB.
+// It reads the token from the httpOnly cookie "furci_access" first,
+// then falls back to the Authorization: Bearer header (for admin panel / API clients).
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
+		var tokenStr string
+
+		// Primary: httpOnly cookie (web app)
+		if cookie, err := c.Cookie("furci_access"); err == nil && cookie != "" {
+			tokenStr = cookie
+		}
+
+		// Fallback: Authorization header (admin panel, API clients, legacy)
+		if tokenStr == "" {
+			auth := c.GetHeader("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				tokenStr = strings.TrimPrefix(auth, "Bearer ")
+			}
+		}
+
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required."})
 			return
 		}
-
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 		secret := os.Getenv("JWT_SECRET")
 		if secret == "" {
 			secret = "furci-default-secret-change-in-prod"

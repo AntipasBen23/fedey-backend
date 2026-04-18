@@ -113,19 +113,23 @@ type UserPreferences struct {
 
 // User is the core identity record for app authentication.
 type User struct {
-	ID            uint           `gorm:"primaryKey" json:"id"`
-	Name          string         `json:"name"`
-	Email         string         `gorm:"uniqueIndex;not null" json:"email"`
-	PasswordHash  string         `json:"-"` // empty for Google-only accounts
-	GoogleID      string         `gorm:"index" json:"-"`
-	IsVerified    bool           `gorm:"default:false" json:"isVerified"`
-	Plan          string         `gorm:"default:'free'" json:"plan"`
-	LoginAttempts int            `gorm:"default:0" json:"-"`
-	LockedUntil   *time.Time     `json:"-"`
-	LastLoginAt   *time.Time     `json:"lastLoginAt"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                 uint           `gorm:"primaryKey" json:"id"`
+	Name               string         `json:"name"`
+	Email              string         `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash       string         `json:"-"` // empty for Google-only accounts
+	GoogleID           string         `gorm:"index" json:"-"`
+	IsVerified         bool           `gorm:"default:false" json:"isVerified"`
+	Plan               string         `gorm:"default:'free'" json:"plan"`
+	LoginAttempts      int            `gorm:"default:0" json:"-"`
+	LockedUntil        *time.Time     `json:"-"`
+	LastLoginAt        *time.Time     `json:"lastLoginAt"`
+	// Onboarding state — persisted server-side so localStorage is not needed
+	JobDescription     string         `json:"jobDescription"`
+	PlatformContext    string         `json:"platformContext"`    // JSON: {platform, accountType}
+	LastOnboardingStep string         `json:"lastOnboardingStep"` // e.g. "/hire", "/strategy", "completed"
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // PageView records a single page visit for analytics.
