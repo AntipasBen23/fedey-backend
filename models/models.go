@@ -143,6 +143,22 @@ type PageView struct {
 	CreatedAt  time.Time `gorm:"index"`
 }
 
+// PageVisit is the enriched visit record with geo-IP, visitor fingerprint, and identity.
+type PageVisit struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	VisitorKey string    `gorm:"index;not null" json:"visitorKey"`
+	UserID     *uint     `gorm:"index" json:"userId"`
+	UserEmail  string    `gorm:"default:''" json:"userEmail"`
+	Path       string    `gorm:"not null" json:"path"`
+	Referrer   string    `gorm:"default:''" json:"referrer"`
+	Country    string    `gorm:"index;default:''" json:"country"`
+	Region     string    `gorm:"default:''" json:"region"`
+	State      string    `gorm:"default:''" json:"state"`
+	City       string    `gorm:"default:''" json:"city"`
+	UserAgent  string    `gorm:"default:''" json:"userAgent"`
+	CreatedAt  time.Time `gorm:"index" json:"createdAt"`
+}
+
 // EmailVerification holds a one-time 6-digit code for verifying a new user's email.
 type EmailVerification struct {
 	ID        uint      `gorm:"primaryKey"`

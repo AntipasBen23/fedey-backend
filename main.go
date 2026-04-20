@@ -46,6 +46,8 @@ func main() {
 			admin.GET("/users", handlers.AdminListUsersHandler)
 			admin.DELETE("/users/:id", handlers.AdminDeleteUserHandler)
 			admin.PATCH("/users/:id/plan", handlers.AdminUpdateUserPlanHandler)
+			admin.GET("/visitors", handlers.AdminVisitorSessionsHandler)
+			admin.GET("/visitors/:key", handlers.AdminVisitorDetailHandler)
 			admin.GET("/visitors/timeline", handlers.AdminVisitorTimelineHandler)
 			admin.GET("/visitors/top-pages", handlers.AdminTopPagesHandler)
 			admin.GET("/visitors/devices", handlers.AdminDevicesHandler)

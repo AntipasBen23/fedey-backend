@@ -40,6 +40,7 @@ func InitDB() {
 		&models.PasswordResetToken{},
 		// Analytics
 		&models.PageView{},
+		&models.PageVisit{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database: %v", err)
