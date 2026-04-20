@@ -23,7 +23,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		// Explicit origins are required when AllowCredentials is true —
 		// browsers reject "*" with credentials per the CORS spec.
-		AllowOrigins:     []string{"https://furciai.com", "https://www.furciai.com", "http://localhost:3000"},
+		AllowOrigins:     []string{"https://furciai.com", "https://www.furciai.com", "http://localhost:3000", "https://furci-ai-admin.netlify.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
