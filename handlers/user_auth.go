@@ -27,10 +27,14 @@ import (
 // ─── httpOnly cookie helpers ──────────────────────────────────────────────────
 
 // cookieAttrs returns security attributes for auth cookies.
-// Production (GIN_MODE=release): SameSite=None; Secure — required for cross-origin (furciai.com ↔ railway.app).
-// Development: SameSite=Lax — works over plain HTTP without Secure flag.
+// Production: SameSite=None; Secure — required for cross-origin (furciai.com ↔ railway.app).
+// Development (localhost): SameSite=Lax — works over plain HTTP without Secure flag.
+// Detection order: GIN_MODE=release OR RAILWAY_ENVIRONMENT set OR COOKIE_SECURE=true.
 func cookieAttrs() string {
-	if os.Getenv("GIN_MODE") == "release" {
+	isProduction := os.Getenv("GIN_MODE") == "release" ||
+		os.Getenv("RAILWAY_ENVIRONMENT") != "" ||
+		os.Getenv("COOKIE_SECURE") == "true"
+	if isProduction {
 		return "; HttpOnly; Secure; SameSite=None"
 	}
 	return "; HttpOnly; SameSite=Lax"
@@ -40,7 +44,7 @@ func cookieAttrs() string {
 func setAuthCookies(c *gin.Context, access, refresh string, refreshExp time.Time) {
 	attrs := cookieAttrs()
 	maxAgeRefresh := int(time.Until(refreshExp).Seconds())
-	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_access=%s; Path=/; Max-Age=900%s", access, attrs))
+	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_access=%s; Path=/; Max-Age=3600%s", access, attrs))
 	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_refresh=%s; Path=/; Max-Age=%d%s", refresh, maxAgeRefresh, attrs))
 }
 
