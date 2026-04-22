@@ -45,6 +45,7 @@ func setAuthCookies(c *gin.Context, access, refresh string, refreshExp time.Time
 	attrs := cookieAttrs()
 	maxAgeRefresh := int(time.Until(refreshExp).Seconds())
 	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_access=%s; Path=/; Max-Age=3600%s", access, attrs))
+	// Max-Age matches the refresh token TTL so the cookie lives exactly as long as the token
 	c.Writer.Header().Add("Set-Cookie", fmt.Sprintf("furci_refresh=%s; Path=/; Max-Age=%d%s", refresh, maxAgeRefresh, attrs))
 }
 
@@ -144,9 +145,9 @@ func issueRefreshToken(userID uint, rememberMe bool) (string, time.Time, error) 
 	}
 	token := hex.EncodeToString(raw)
 
-	ttl := 7 * 24 * time.Hour
+	ttl := 30 * 24 * time.Hour
 	if rememberMe {
-		ttl = 30 * 24 * time.Hour
+		ttl = 90 * 24 * time.Hour
 	}
 	exp := time.Now().Add(ttl)
 
