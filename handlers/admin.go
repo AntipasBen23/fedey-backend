@@ -9,10 +9,16 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/worker"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func TestDailyReportHandler(c *gin.Context) {
+	go worker.SendDailyReports()
+	c.JSON(http.StatusOK, gin.H{"message": "Daily report cycle triggered in background."})
+}
 
 // ─── Admin JWT ────────────────────────────────────────────────────────────────
 

@@ -17,10 +17,19 @@ func StartScheduler() {
 	listeningTicker := time.NewTicker(15 * time.Minute) // Social listening every 15 mins
 
 	go func() {
+		lastReportDate := ""
 		for {
 			select {
 			case <-ticker.C:
 				CheckForDuePosts()
+				
+				// Daily Progress Report check
+				now := time.Now()
+				today := now.Format("2006-01-02")
+				if now.Hour() == 23 && now.Minute() == 30 && lastReportDate != today {
+					SendDailyReports()
+					lastReportDate = today
+				}
 			case <-listeningTicker.C:
 				RunSocialListening()
 			}

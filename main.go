@@ -52,6 +52,7 @@ func main() {
 			admin.GET("/visitors/top-pages", handlers.AdminTopPagesHandler)
 			admin.GET("/visitors/devices", handlers.AdminDevicesHandler)
 			admin.GET("/activity", handlers.AdminActivityHandler)
+			admin.POST("/reports/test", handlers.TestDailyReportHandler)
 		}
 
 		// ── Public auth routes ──────────────────────────────────────────────
