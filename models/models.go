@@ -9,8 +9,9 @@ import (
 // SocialAccount stores OAuth tokens and platform info
 type SocialAccount struct {
 	ID               uint           `gorm:"primaryKey" json:"id"`
-	Platform         string         `gorm:"uniqueIndex:idx_platform_context" json:"platform"`
-	AccountType      string         `gorm:"uniqueIndex:idx_platform_context" json:"accountType"` // 'old' or 'new'
+	UserID           uint           `gorm:"uniqueIndex:idx_user_platform_context;not null" json:"userId"`
+	Platform         string         `gorm:"uniqueIndex:idx_user_platform_context" json:"platform"`
+	AccountType      string         `gorm:"uniqueIndex:idx_user_platform_context" json:"accountType"` // 'old' or 'new'
 	AccessToken      string         `json:"accessToken"`
 	AutoPilotEnabled bool           `gorm:"default:false" json:"autoPilotEnabled"`
 	GhostModeEnabled bool           `gorm:"default:false" json:"ghostModeEnabled"`
@@ -24,6 +25,7 @@ type SocialAccount struct {
 // ContentCalendar stores generated content plans
 type ContentCalendar struct {
 	ID             uint           `gorm:"primaryKey" json:"id"`
+	UserID         uint           `gorm:"index;not null" json:"userId"`
 	ProductSummary string         `json:"productSummary"`
 	ContentJSON    string         `json:"contentJson"` // Stores the plan as JSON string
 	Status         string         `gorm:"default:'draft'" json:"status"` // 'draft' or 'scheduled'
@@ -36,6 +38,7 @@ type ContentCalendar struct {
 // ScheduledPost represents a discrete posting event for the background worker
 type ScheduledPost struct {
 	ID            uint           `gorm:"primaryKey" json:"id"`
+	UserID        uint           `gorm:"index;not null" json:"userId"`
 	AccountID     uint           `json:"accountId"`
 	Platform      string         `json:"platform"`
 	Content       string         `json:"content"`
@@ -76,6 +79,7 @@ type PostAnalytics struct {
 // UserStrategy stores the active growth strategy
 type UserStrategy struct {
 	ID                 uint           `gorm:"primaryKey" json:"id"`
+	UserID             uint           `gorm:"index;not null" json:"userId"`
 	IdentityAudit      string         `json:"identityAudit"`
 	TrendMonitoring    string         `json:"trendMonitoring"` // JSON string
 	GrowthExperiments  string         `json:"growthExperiments"` // JSON string
@@ -93,8 +97,9 @@ type UserStrategy struct {
 // Used to power the follower growth chart on the dashboard.
 type FollowerSnapshot struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Date      string    `gorm:"uniqueIndex:idx_snapshot_date_platform" json:"date"` // "2026-04-16"
-	Platform  string    `gorm:"uniqueIndex:idx_snapshot_date_platform" json:"platform"`
+	UserID    uint      `gorm:"uniqueIndex:idx_user_snapshot_date_platform;not null" json:"userId"`
+	Date      string    `gorm:"uniqueIndex:idx_user_snapshot_date_platform" json:"date"` // "2026-04-16"
+	Platform  string    `gorm:"uniqueIndex:idx_user_snapshot_date_platform" json:"platform"`
 	Count     int       `json:"count"`
 	CreatedAt time.Time `json:"createdAt"`
 }
@@ -191,6 +196,7 @@ type PasswordResetToken struct {
 // EngagementEvent tracks find-and-reply social listening events
 type EngagementEvent struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`
+	UserID          uint           `gorm:"index;not null" json:"userId"`
 	AccountID       uint           `json:"accountId"`
 	Platform        string         `json:"platform"`
 	Type            string         `json:"type"` // 'mention', 'niche_discovery', 'comment_on_self'

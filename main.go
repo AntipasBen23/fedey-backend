@@ -69,59 +69,59 @@ func main() {
 		v1.GET("/user/me", middleware.RequireAuth(), handlers.GetMeHandler)
 		v1.PATCH("/user/onboarding", middleware.RequireAuth(), handlers.UpdateOnboardingHandler)
 
-		// ── Existing routes (kept open for now — add RequireAuth() as needed) ─
-		v1.POST("/analyze", handlers.AnalyzeHandler)
-		v1.POST("/auth/callback", handlers.AuthCallbackHandler)
-		v1.DELETE("/auth/disconnect", handlers.DisconnectHandler)
-		v1.POST("/strategy", handlers.StrategyHandler)
-		v1.POST("/strategy/refine", handlers.StrategyRefineHandler)
-		v1.POST("/calendar", handlers.CalendarHandler)
-		v1.GET("/calendar/status", handlers.GetCalendarStatusHandler)
-		v1.POST("/calendar/approve", handlers.ApproveCalendarHandler)
-		v1.GET("/dashboard", handlers.GetDashboardHandler)
-		v1.POST("/settings/autopilot", handlers.ToggleAutoPilotHandler)
-		v1.POST("/revise", handlers.ReviseHandler)
+		// ── Protected app routes ────────────────────────────────────────────────
+		v1.POST("/analyze", middleware.RequireAuth(), handlers.AnalyzeHandler)
+		v1.POST("/auth/callback", middleware.RequireAuth(), handlers.AuthCallbackHandler)
+		v1.DELETE("/auth/disconnect", middleware.RequireAuth(), handlers.DisconnectHandler)
+		v1.POST("/strategy", middleware.RequireAuth(), handlers.StrategyHandler)
+		v1.POST("/strategy/refine", middleware.RequireAuth(), handlers.StrategyRefineHandler)
+		v1.POST("/calendar", middleware.RequireAuth(), handlers.CalendarHandler)
+		v1.GET("/calendar/status", middleware.RequireAuth(), handlers.GetCalendarStatusHandler)
+		v1.POST("/calendar/approve", middleware.RequireAuth(), handlers.ApproveCalendarHandler)
+		v1.GET("/dashboard", middleware.RequireAuth(), handlers.GetDashboardHandler)
+		v1.POST("/settings/autopilot", middleware.RequireAuth(), handlers.ToggleAutoPilotHandler)
+		v1.POST("/revise", middleware.RequireAuth(), handlers.ReviseHandler)
 
 		// Trends & Social Listening
-		v1.GET("/trends", handlers.GetTrendsHandler)
-		v1.POST("/trends/react", handlers.ReactToTrendHandler)
-		v1.POST("/trends/react/schedule", handlers.ScheduleReactionHandler)
+		v1.GET("/trends", middleware.RequireAuth(), handlers.GetTrendsHandler)
+		v1.POST("/trends/react", middleware.RequireAuth(), handlers.ReactToTrendHandler)
+		v1.POST("/trends/react/schedule", middleware.RequireAuth(), handlers.ScheduleReactionHandler)
 
 		// Analytics
-		v1.GET("/analytics", handlers.GetAnalyticsHandler)
-		v1.POST("/analytics/sync", handlers.SyncAnalyticsHandler)
-		v1.GET("/analytics/peak-hours", handlers.GetPeakHoursHandler)
+		v1.GET("/analytics", middleware.RequireAuth(), handlers.GetAnalyticsHandler)
+		v1.POST("/analytics/sync", middleware.RequireAuth(), handlers.SyncAnalyticsHandler)
+		v1.GET("/analytics/peak-hours", middleware.RequireAuth(), handlers.GetPeakHoursHandler)
 
 		// Posts Management
-		v1.PUT("/posts/:id", handlers.UpdatePostHandler)
-		v1.DELETE("/posts/:id", handlers.DeletePostHandler)
-		v1.POST("/posts", handlers.CreatePostHandler)
-		v1.POST("/posts/polish", handlers.AIPolishHandler)
+		v1.PUT("/posts/:id", middleware.RequireAuth(), handlers.UpdatePostHandler)
+		v1.DELETE("/posts/:id", middleware.RequireAuth(), handlers.DeletePostHandler)
+		v1.POST("/posts", middleware.RequireAuth(), handlers.CreatePostHandler)
+		v1.POST("/posts/polish", middleware.RequireAuth(), handlers.AIPolishHandler)
 
 		// Conversational AI
-		v1.POST("/chat", handlers.ChatWithFurciHandler)
+		v1.POST("/chat", middleware.RequireAuth(), handlers.ChatWithFurciHandler)
 
 		// Engagement & Ghost Operator
-		v1.GET("/engagements", handlers.GetEngagementsHandler)
-		v1.POST("/engagements/:id/approve", handlers.ApproveEngagementHandler)
-		v1.POST("/settings/ghost-mode", handlers.ToggleGhostModeHandler)
+		v1.GET("/engagements", middleware.RequireAuth(), handlers.GetEngagementsHandler)
+		v1.POST("/engagements/:id/approve", middleware.RequireAuth(), handlers.ApproveEngagementHandler)
+		v1.POST("/settings/ghost-mode", middleware.RequireAuth(), handlers.ToggleGhostModeHandler)
 
 		// Script Engine
-		v1.POST("/scripts/generate", handlers.GenerateScriptHandler)
+		v1.POST("/scripts/generate", middleware.RequireAuth(), handlers.GenerateScriptHandler)
 
 		// Carousel
-		v1.POST("/carousel/images", handlers.GenerateCarouselImagesHandler)
-		v1.POST("/carousel/design", handlers.GenerateCarouselDesignHandler)
+		v1.POST("/carousel/images", middleware.RequireAuth(), handlers.GenerateCarouselImagesHandler)
+		v1.POST("/carousel/design", middleware.RequireAuth(), handlers.GenerateCarouselDesignHandler)
 
 		// Plan management
-		v1.GET("/plan", handlers.GetPlanHandler)
-		v1.POST("/plan/upgrade", handlers.UpgradePlanHandler)
+		v1.GET("/plan", middleware.RequireAuth(), handlers.GetPlanHandler)
+		v1.POST("/plan/upgrade", middleware.RequireAuth(), handlers.UpgradePlanHandler)
 
 		// Video Generation
-		v1.POST("/video/template", handlers.GenerateTemplateVideoHandler)
-		v1.POST("/video/generate", handlers.GenerateVideoHandler)
-		v1.GET("/video/status/:taskId", handlers.GetVideoStatusHandler)
-		v1.DELETE("/video/task/:taskId", handlers.CancelVideoTaskHandler)
+		v1.POST("/video/template", middleware.RequireAuth(), handlers.GenerateTemplateVideoHandler)
+		v1.POST("/video/generate", middleware.RequireAuth(), handlers.GenerateVideoHandler)
+		v1.GET("/video/status/:taskId", middleware.RequireAuth(), handlers.GetVideoStatusHandler)
+		v1.DELETE("/video/task/:taskId", middleware.RequireAuth(), handlers.CancelVideoTaskHandler)
 	}
 
 	port := os.Getenv("PORT")

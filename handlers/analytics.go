@@ -26,11 +26,19 @@ func GetPeakHoursHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var results []PeakHourData
 	// Query to aggregate engagement and reach by day and hour
 	err := database.DB.Table("post_analytics").
 		Select("EXTRACT(DOW FROM scheduled_posts.scheduled_at) as day, EXTRACT(HOUR FROM scheduled_posts.scheduled_at) as hour, AVG(post_analytics.engagement_rate) as engagement, SUM(post_analytics.impressions) as reach").
 		Joins("JOIN scheduled_posts ON scheduled_posts.id = post_analytics.scheduled_post_id").
+		Where("scheduled_posts.user_id = ?", uid).
 		Group("day, hour").
 		Scan(&results).Error
 
@@ -81,12 +89,18 @@ type AnalyticsOverview struct {
 // ─── GET /v1/analytics ────────────────────────────────────────────────────────
 
 func GetAnalyticsHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, buildAnalyticsOverview())
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	c.JSON(http.StatusOK, buildAnalyticsOverview(uid))
 }
 
 // buildAnalyticsOverview assembles AnalyticsOverview from stored data.
 // Called by both GetAnalyticsHandler and GetDashboardHandler.
-func buildAnalyticsOverview() AnalyticsOverview {
+func buildAnalyticsOverview(userID uint) AnalyticsOverview {
 	overview := AnalyticsOverview{Insight: "Sync your analytics to see performance insights."}
 	if database.DB == nil {
 		return overview
@@ -94,7 +108,7 @@ func buildAnalyticsOverview() AnalyticsOverview {
 
 	// Follower count from the connected account
 	var account models.SocialAccount
-	if database.DB.Where("platform IN ?", []string{"twitter", "x"}).
+	if database.DB.Where("user_id = ? AND platform IN ?", userID, []string{"twitter", "x"}).
 		Order("updated_at desc").First(&account).Error == nil {
 		overview.FollowerCount = account.FollowerCount
 	}
@@ -112,7 +126,7 @@ func buildAnalyticsOverview() AnalyticsOverview {
 	database.DB.Table("post_analytics").
 		Select("post_analytics.*, scheduled_posts.content, scheduled_posts.platform, scheduled_posts.content_type, scheduled_posts.scheduled_at").
 		Joins("JOIN scheduled_posts ON scheduled_posts.id = post_analytics.scheduled_post_id").
-		Where("post_analytics.deleted_at IS NULL").
+		Where("post_analytics.deleted_at IS NULL AND scheduled_posts.user_id = ?", userID).
 		Order("post_analytics.engagement_rate DESC").
 		Limit(50).
 		Scan(&rows)
@@ -164,7 +178,7 @@ func buildAnalyticsOverview() AnalyticsOverview {
 
 	// Follower growth history — last 30 daily snapshots
 	var snapshots []models.FollowerSnapshot
-	database.DB.Where("date >= ?", time.Now().AddDate(0, 0, -30).Format("2006-01-02")).
+	database.DB.Where("user_id = ? AND date >= ?", userID, time.Now().AddDate(0, 0, -30).Format("2006-01-02")).
 		Order("date asc").
 		Find(&snapshots)
 
@@ -209,9 +223,16 @@ func generateInsight(o AnalyticsOverview) string {
 // ─── POST /v1/analytics/sync ─────────────────────────────────────────────────
 
 func SyncAnalyticsHandler(c *gin.Context) {
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// Find connected Twitter/X account
 	var account models.SocialAccount
-	err := database.DB.Where("platform IN ?", []string{"twitter", "x"}).
+	err := database.DB.Where("user_id = ? AND platform IN ?", uid, []string{"twitter", "x"}).
 		Order("updated_at desc").First(&account).Error
 	if err != nil || account.AccessToken == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No Twitter/X account connected. Connect one first."})
@@ -232,14 +253,15 @@ func SyncAnalyticsHandler(c *gin.Context) {
 	database.DB.Model(&account).Update("follower_count", followerCount)
 	log.Printf("[Analytics] Follower count: %d", followerCount)
 
-	// Save daily snapshot (one per day — upsert by date + platform)
+	// Save daily snapshot (one per day — upsert by user + date + platform)
 	today := time.Now().Format("2006-01-02")
 	snapshot := models.FollowerSnapshot{
+		UserID:   uid,
 		Date:     today,
 		Platform: account.Platform,
 		Count:    followerCount,
 	}
-	database.DB.Where("date = ? AND platform = ?", today, account.Platform).
+	database.DB.Where("user_id = ? AND date = ? AND platform = ?", uid, today, account.Platform).
 		Assign(snapshot).
 		FirstOrCreate(&snapshot)
 
@@ -260,7 +282,7 @@ func SyncAnalyticsHandler(c *gin.Context) {
 	synced := 0
 	for _, t := range tweets {
 		var post models.ScheduledPost
-		if database.DB.Where("external_id = ?", t.ID).First(&post).Error != nil {
+		if database.DB.Where("user_id = ? AND external_id = ?", uid, t.ID).First(&post).Error != nil {
 			continue // not our post
 		}
 

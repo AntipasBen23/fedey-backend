@@ -24,11 +24,18 @@ func ChatWithFurciHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// 1. Gather Dashboard Context for the AI
-	
+
 	// A. Pending Posts (Upcoming Queue)
 	var pendingPosts []models.ScheduledPost
-	database.DB.Where("status = ?", "pending").Order("scheduled_at asc").Limit(10).Find(&pendingPosts)
+	database.DB.Where("user_id = ? AND status = ?", uid, "pending").Order("scheduled_at asc").Limit(10).Find(&pendingPosts)
 	postContext := ""
 	for _, p := range pendingPosts {
 		postContext += fmt.Sprintf("- [%s at %s]: %s\n", p.Platform, p.ScheduledAt.Format("Jan 02, 15:04"), p.Content[:60]+"...")
@@ -36,10 +43,10 @@ func ChatWithFurciHandler(c *gin.Context) {
 
 	// B. Current Strategy
 	var strategy models.UserStrategy
-	database.DB.Order("created_at desc").First(&strategy)
+	database.DB.Where("user_id = ?", uid).Order("created_at desc").First(&strategy)
 
 	// C. Analytics Summary
-	analytics := buildAnalyticsOverview()
+	analytics := buildAnalyticsOverview(uid)
 	analyticsContext := fmt.Sprintf(`
 		- Total Followers: %d (%+d in last 30d)
 		- Total Impressions: %d

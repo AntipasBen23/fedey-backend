@@ -25,8 +25,15 @@ func ToggleAutoPilotHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	result := database.DB.Model(&models.SocialAccount{}).
-		Where("platform = ?", req.Platform).
+		Where("user_id = ? AND platform = ?", uid, req.Platform).
 		Update("auto_pilot_enabled", req.Enabled)
 
 	if result.Error != nil {

@@ -100,9 +100,16 @@ func CalendarHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// 1. Short-Circuit: Check for existing DRAFT
 	var existing models.ContentCalendar
-	err := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&existing).Error
+	err := database.DB.Where("user_id = ? AND status = ?", uid, "draft").Order("created_at desc").First(&existing).Error
 	if err == nil {
 		var calRes CalendarResponse
 		if err := json.Unmarshal([]byte(existing.ContentJSON), &calRes.Calendar); err == nil {
@@ -113,7 +120,7 @@ func CalendarHandler(c *gin.Context) {
 
 	// 2. Fallback: Generate New via OpenAI
 	var platforms []string
-	database.DB.Model(&models.SocialAccount{}).Pluck("platform", &platforms)
+	database.DB.Model(&models.SocialAccount{}).Where("user_id = ?", uid).Pluck("platform", &platforms)
 	platformContext := strings.Join(platforms, ", ")
 	if platformContext == "" {
 		platformContext = "Twitter (X)" // Fallback
@@ -169,6 +176,7 @@ func CalendarHandler(c *gin.Context) {
 	// Persist to Database as Draft
 	contentJSON, _ := json.Marshal(calRes.Calendar)
 	dbCal := models.ContentCalendar{
+		UserID:         uid,
 		ProductSummary: req.ProductSummary,
 		ContentJSON:    string(contentJSON),
 		Status:         "draft",
@@ -185,9 +193,16 @@ func GetCalendarStatusHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var cal models.ContentCalendar
-	// Find the most recent calendar
-	err := database.DB.Order("created_at desc").First(&cal).Error
+	// Find the most recent calendar for this user
+	err := database.DB.Where("user_id = ?", uid).Order("created_at desc").First(&cal).Error
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"status": "none"})
 		return
@@ -265,9 +280,16 @@ func ApproveCalendarHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// 1. Fetch Draft Calendar
 	var cal models.ContentCalendar
-	if err := database.DB.Where("status = ?", "draft").Order("created_at desc").First(&cal).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND status = ?", uid, "draft").Order("created_at desc").First(&cal).Error; err != nil {
 		log.Printf("[Approve] Draft Fetch Error: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found to approve"})
 		return
@@ -282,15 +304,15 @@ func ApproveCalendarHandler(c *gin.Context) {
 
 	// 2. Fetch Connected Accounts
 	var accounts []models.SocialAccount
-	database.DB.Find(&accounts)
+	database.DB.Where("user_id = ?", uid).Find(&accounts)
 	if len(accounts) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No social accounts connected. Please connect X or LinkedIn first."})
 		return
 	}
 
-	// 3. Update User Preferences if SaveAsDefault is requested
+	// 3. Update User Strategy if SaveAsDefault is requested
 	if req.SaveAsDefault {
-		database.DB.Model(&models.UserStrategy{}).Where("1=1").Updates(map[string]interface{}{
+		database.DB.Model(&models.UserStrategy{}).Where("user_id = ?", uid).Updates(map[string]interface{}{
 			"preferred_stagger": req.StaggerStrategy,
 			"preferred_mode":    req.SchedulingMode,
 		})
@@ -314,12 +336,12 @@ func ApproveCalendarHandler(c *gin.Context) {
 		} else {
 			// Get Brand Niche from strategy for AI-nudge
 			var strategy models.UserStrategy
-			database.DB.Order("created_at desc").First(&strategy)
+			database.DB.Where("user_id = ?", uid).Order("created_at desc").First(&strategy)
 			niche := strategy.IdentityAudit
 
 			// Try Local Sniping first
 			peakHour, hasLocal := getPeakHour(accounts[0].ID) // Baseline on first account
-			
+
 			if req.SchedulingMode == "hybrid" {
 				// Window-based Sniping
 				hour = getAINudgedTime("global", niche, req.TimeWindow)
@@ -334,7 +356,7 @@ func ApproveCalendarHandler(c *gin.Context) {
 					hour = getAINudgedTime("global", niche, "morning")
 					reasoning = "Global peak targeted (Adjusted for brand niche context)."
 				}
-				minute = 10 
+				minute = 10
 			}
 		}
 
@@ -343,11 +365,11 @@ func ApproveCalendarHandler(c *gin.Context) {
 
 		for accIdx, account := range accounts {
 			scheduledTime := baseTime
-			
+
 			// Apply Staggering
 			if req.StaggerStrategy == "smart" {
 				// Randomize delay between 45-90 mins per platform
-				delay := 45 + (accIdx * 30) 
+				delay := 45 + (accIdx * 30)
 				scheduledTime = scheduledTime.Add(time.Duration(delay) * time.Minute)
 				reasoning += fmt.Sprintf(" Smart Stagger applied (+%dm).", delay)
 			} else if req.StaggerStrategy == "fixed" {
@@ -370,6 +392,7 @@ func ApproveCalendarHandler(c *gin.Context) {
 			slidesJSON, _ := json.Marshal(item.Slides)
 
 			post := models.ScheduledPost{
+				UserID:      uid,
 				AccountID:   account.ID,
 				Platform:    account.Platform,
 				Content:     publishContent,

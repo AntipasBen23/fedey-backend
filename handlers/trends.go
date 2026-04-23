@@ -26,9 +26,12 @@ type TrendWrapper struct {
 }
 
 func GetTrendsHandler(c *gin.Context) {
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+
 	// 1. Fetch user strategy for context
 	var strategy models.UserStrategy
-	if err := database.DB.Order("created_at desc").First(&strategy).Error; err != nil {
+	if uid == 0 || database.DB.Where("user_id = ?", uid).Order("created_at desc").First(&strategy).Error != nil {
 		// Default to generic tech trends if no strategy found
 		strategy.IdentityAudit = "A tech and AI enthusiast looking to grow their personal brand."
 	}
@@ -103,8 +106,11 @@ func ReactToTrendHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+
 	var strategy models.UserStrategy
-	database.DB.Order("created_at desc").First(&strategy)
+	database.DB.Where("user_id = ?", uid).Order("created_at desc").First(&strategy)
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	client := openai.NewClient(apiKey)
@@ -152,9 +158,16 @@ func ScheduleReactionHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// 1. Fetch connected accounts for the requested platform
 	var accounts []models.SocialAccount
-	query := database.DB
+	query := database.DB.Where("user_id = ?", uid)
 	if req.Platform != "both" {
 		query = query.Where("platform = ?", req.Platform)
 	}
@@ -170,6 +183,7 @@ func ScheduleReactionHandler(c *gin.Context) {
 
 	for _, account := range accounts {
 		post := models.ScheduledPost{
+			UserID:      uid,
 			AccountID:   account.ID,
 			Platform:    account.Platform,
 			Content:     req.Content,

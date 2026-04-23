@@ -34,6 +34,13 @@ func CreatePostHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var req CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
@@ -42,7 +49,7 @@ func CreatePostHandler(c *gin.Context) {
 
 	// Fetch Connected Accounts
 	var accounts []models.SocialAccount
-	database.DB.Where("platform IN ?", req.Platforms).Find(&accounts)
+	database.DB.Where("user_id = ? AND platform IN ?", uid, req.Platforms).Find(&accounts)
 	if len(accounts) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No connected accounts found for selected platforms"})
 		return
@@ -73,6 +80,7 @@ func CreatePostHandler(c *gin.Context) {
 
 	for _, acc := range accounts {
 		post := models.ScheduledPost{
+			UserID:      uid,
 			AccountID:   acc.ID,
 			Platform:    acc.Platform,
 			Content:     req.Content,
@@ -132,6 +140,13 @@ func UpdatePostHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id == 0 {
@@ -146,7 +161,7 @@ func UpdatePostHandler(c *gin.Context) {
 	}
 
 	var post models.ScheduledPost
-	if err := database.DB.First(&post, id).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", uid).First(&post, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
 		return
 	}
@@ -199,6 +214,13 @@ func DeletePostHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id == 0 {
@@ -206,14 +228,14 @@ func DeletePostHandler(c *gin.Context) {
 		return
 	}
 
-	// Verify it exists first so we return 404 rather than silently succeeding
+	// Verify it exists and belongs to this user
 	var post models.ScheduledPost
-	if err := database.DB.First(&post, id).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", uid).First(&post, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
 		return
 	}
 
-	if err := database.DB.Delete(&models.ScheduledPost{}, id).Error; err != nil {
+	if err := database.DB.Delete(&post).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete post"})
 		return
 	}

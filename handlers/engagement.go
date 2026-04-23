@@ -18,8 +18,15 @@ func GetEngagementsHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var events []models.EngagementEvent
-	database.DB.Order("created_at desc").Limit(20).Find(&events)
+	database.DB.Where("user_id = ?", uid).Order("created_at desc").Limit(20).Find(&events)
 
 	c.JSON(http.StatusOK, events)
 }
@@ -31,17 +38,24 @@ func ApproveEngagementHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, _ := strconv.Atoi(idStr)
 
 	var event models.EngagementEvent
-	if err := database.DB.First(&event, id).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", uid).First(&event, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Engagement event not found"})
 		return
 	}
 
 	var account models.SocialAccount
-	database.DB.First(&account, event.AccountID)
+	database.DB.Where("user_id = ?", uid).First(&account, event.AccountID)
 
 	_, success, err := utils.PostSingleTweetToX(account.AccessToken, event.ProposedReply)
 	if !success {
@@ -60,6 +74,13 @@ func ToggleGhostModeHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -68,8 +89,7 @@ func ToggleGhostModeHandler(c *gin.Context) {
 		return
 	}
 
-	// For now, update ALL accounts or just focus on the first connected one
-	err := database.DB.Model(&models.SocialAccount{}).Where("1=1").Update("ghost_mode_enabled", req.Enabled).Error
+	err := database.DB.Model(&models.SocialAccount{}).Where("user_id = ?", uid).Update("ghost_mode_enabled", req.Enabled).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Ghost Mode settings"})
 		return

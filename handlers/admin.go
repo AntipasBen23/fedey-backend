@@ -269,6 +269,15 @@ func AdminDeleteUserHandler(c *gin.Context) {
 	database.DB.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{})
 	database.DB.Where("user_id = ?", user.ID).Delete(&models.EmailVerification{})
 	database.DB.Where("user_id = ?", user.ID).Delete(&models.PasswordResetToken{})
+
+	// Hard-delete all user content
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.SocialAccount{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.ContentCalendar{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.ScheduledPost{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.UserStrategy{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.EngagementEvent{})
+	database.DB.Where("user_id = ?", user.ID).Delete(&models.FollowerSnapshot{})
+
 	database.DB.Delete(&user)
 
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted."})

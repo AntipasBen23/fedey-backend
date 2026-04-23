@@ -12,7 +12,6 @@ import (
 	"github.com/AntipasBen23/fedey-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
-	"gorm.io/gorm"
 )
 
 func fetchUserTweets(accessToken string) (string, error) {
@@ -112,6 +111,13 @@ func StrategyHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Furci couldn't access her brain (API Key missing)."})
@@ -124,7 +130,7 @@ func StrategyHandler(c *gin.Context) {
 	auditContext := "No profile audit performed (New Account)."
 	if req.AccountType == "old" && database.DB != nil {
 		var account models.SocialAccount
-		result := database.DB.Where("platform = ?", req.Platform).First(&account)
+		result := database.DB.Where("user_id = ? AND platform = ?", uid, req.Platform).First(&account)
 		if result.Error == nil {
 			tweets, err := fetchUserTweets(account.AccessToken)
 			if err == nil {
@@ -170,13 +176,14 @@ func StrategyHandler(c *gin.Context) {
 		analyticsJSON, _ := json.Marshal(strategy.AnalyticsReporting)
 
 		userStrat := models.UserStrategy{
+			UserID:             uid,
 			IdentityAudit:      strategy.IdentityAudit,
 			TrendMonitoring:    string(trendsJSON),
 			GrowthExperiments:  string(expsJSON),
 			AnalyticsReporting: string(analyticsJSON),
 		}
-		// Overwrite any existing strategy (Furci has one active brain)
-		database.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.UserStrategy{})
+		// Overwrite any existing strategy for this user
+		database.DB.Where("user_id = ?", uid).Delete(&models.UserStrategy{})
 		database.DB.Create(&userStrat)
 	}
 

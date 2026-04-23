@@ -28,15 +28,23 @@ func AuthCallbackHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// Use Atomic Upsert (On Conflict) to handle potential race conditions from double-clicks
 	account := models.SocialAccount{
+		UserID:      uid,
 		Platform:    req.Platform,
 		AccessToken: req.AccessToken,
 		AccountType: req.AccountType,
 	}
 
 	err := database.DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "platform"}, {Name: "account_type"}},
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "platform"}, {Name: "account_type"}},
 		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at", "deleted_at"}),
 	}).Create(&account).Error
 
@@ -49,7 +57,7 @@ func AuthCallbackHandler(c *gin.Context) {
 	fmt.Printf("[AUTH] Account synced successfully: Platform=%s, Type=%s\n", req.Platform, req.AccountType)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Authentication successful. Furci now has access to your account (Persistent).",
+		"message":  "Authentication successful. Furci now has access to your account (Persistent).",
 		"platform": req.Platform,
 	})
 }

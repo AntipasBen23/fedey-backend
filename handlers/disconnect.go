@@ -24,19 +24,26 @@ func DisconnectHandler(c *gin.Context) {
 		return
 	}
 
+	userIDVal, _ := c.Get("userID")
+	uid, _ := userIDVal.(uint)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// 1. Find the account first to get the ID and verify existence
 	var account models.SocialAccount
-	if err := database.DB.Where("platform = ?", req.Platform).First(&account).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND platform = ?", uid, req.Platform).First(&account).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found for " + req.Platform})
 		return
 	}
 
-	// 2. Wipe ALL related data for this account to ensures a 100% clean slate
+	// 2. Wipe ALL related data for this account to ensure a 100% clean slate
 	// Delete Scheduled Posts
-	database.DB.Where("account_id = ?", account.ID).Delete(&models.ScheduledPost{})
-	
+	database.DB.Where("user_id = ? AND account_id = ?", uid, account.ID).Delete(&models.ScheduledPost{})
+
 	// Delete platform-specific Analytics (to prevent legacy data from polluting the new connection)
-	database.DB.Where("scheduled_post_id IN (SELECT id FROM scheduled_posts WHERE account_id = ?)", account.ID).Delete(&models.PostAnalytics{})
+	database.DB.Where("scheduled_post_id IN (SELECT id FROM scheduled_posts WHERE user_id = ? AND account_id = ?)", uid, account.ID).Delete(&models.PostAnalytics{})
 
 	// 3. Finally, delete the social account (soft delete)
 	if err := database.DB.Delete(&account).Error; err != nil {
@@ -44,8 +51,8 @@ func DisconnectHandler(c *gin.Context) {
 		return
 	}
 
-	// 4. Wipe ALL Draft Calendars (since calendars are generated based on the specific connection state)
-	database.DB.Where("status = ?", "draft").Delete(&models.ContentCalendar{})
+	// 4. Wipe user's Draft Calendars (since calendars are generated based on the specific connection state)
+	database.DB.Where("user_id = ? AND status = ?", uid, "draft").Delete(&models.ContentCalendar{})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Successfully disconnected from " + req.Platform + ". Your tokens have been wiped.",
