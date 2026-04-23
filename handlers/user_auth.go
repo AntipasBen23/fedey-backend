@@ -27,15 +27,15 @@ import (
 // ─── httpOnly cookie helpers ──────────────────────────────────────────────────
 
 // cookieAttrs returns security attributes for auth cookies.
-// Production: SameSite=None; Secure — required for cross-origin (furciai.com ↔ railway.app).
-// Development (localhost): SameSite=Lax — works over plain HTTP without Secure flag.
-// Detection order: GIN_MODE=release OR RAILWAY_ENVIRONMENT set OR COOKIE_SECURE=true.
+// Production: SameSite=Lax; Secure — api.furciai.com and furciai.com share the same
+// registered domain so cookies are same-site and SameSite=Lax is sufficient.
+// Development (localhost): SameSite=Lax over plain HTTP (no Secure flag).
 func cookieAttrs() string {
 	isProduction := os.Getenv("GIN_MODE") == "release" ||
 		os.Getenv("RAILWAY_ENVIRONMENT") != "" ||
 		os.Getenv("COOKIE_SECURE") == "true"
 	if isProduction {
-		return "; HttpOnly; Secure; SameSite=None"
+		return "; HttpOnly; Secure; SameSite=Lax"
 	}
 	return "; HttpOnly; SameSite=Lax"
 }
@@ -611,33 +611,23 @@ func GoogleAuthHandler(c *gin.Context) {
 	var user models.User
 	result := database.DB.Where("email = ?", gData.Email).First(&user)
 	if result.Error != nil {
-		// Check if a soft-deleted record exists for this email
+		// Reject if admin deleted this account — do not restore it
 		var deleted models.User
 		if database.DB.Unscoped().Where("email = ?", gData.Email).First(&deleted).Error == nil {
-			// Restore the soft-deleted account and link Google
-			if err := database.DB.Unscoped().Model(&deleted).Updates(map[string]interface{}{
-				"deleted_at": nil,
-				"google_id":  gData.Sub,
-				"is_verified": true,
-				"name":       gData.Name,
-			}).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
-				return
-			}
-			user = deleted
-		} else {
-			// Truly new user via Google
-			user = models.User{
-				Name:       gData.Name,
-				Email:      gData.Email,
-				GoogleID:   gData.Sub,
-				IsVerified: true,
-				Plan:       "free",
-			}
-			if err := database.DB.Create(&user).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
-				return
-			}
+			c.JSON(http.StatusForbidden, gin.H{"error": "This account has been removed. Please contact support."})
+			return
+		}
+		// Truly new user via Google
+		user = models.User{
+			Name:       gData.Name,
+			Email:      gData.Email,
+			GoogleID:   gData.Sub,
+			IsVerified: true,
+			Plan:       "free",
+		}
+		if err := database.DB.Create(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+			return
 		}
 	} else if user.GoogleID == "" {
 		// Existing email-password user — link Google to their account
