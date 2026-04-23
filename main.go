@@ -68,6 +68,7 @@ func main() {
 		// ── Protected user routes ───────────────────────────────────────────
 		v1.GET("/user/me", middleware.RequireAuth(), handlers.GetMeHandler)
 		v1.PATCH("/user/onboarding", middleware.RequireAuth(), handlers.UpdateOnboardingHandler)
+		v1.PATCH("/user/username", middleware.RequireAuth(), handlers.SetUsernameHandler)
 
 		// ── Protected app routes ────────────────────────────────────────────────
 		v1.POST("/analyze", middleware.RequireAuth(), handlers.AnalyzeHandler)

@@ -61,6 +61,7 @@ func userJSON(u models.User) gin.H {
 	return gin.H{
 		"id":                 u.ID,
 		"name":               u.Name,
+		"username":           u.Username,
 		"email":              u.Email,
 		"plan":               u.Plan,
 		"jobDescription":     u.JobDescription,
@@ -779,6 +780,39 @@ func GetMeHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, userJSON(user))
+}
+
+// ─── PATCH /v1/user/username ─────────────────────────────────────────────────
+
+type SetUsernameRequest struct {
+	Username string `json:"username" binding:"required"`
+}
+
+func SetUsernameHandler(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	var req SetUsernameRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Username) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username is required."})
+		return
+	}
+	username := strings.ToLower(strings.TrimSpace(req.Username))
+	// validate: only alphanumeric + underscore, 3-20 chars
+	matched, _ := regexp.MatchString(`^[a-z0-9_]{3,20}$`, username)
+	if !matched {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be 3-20 characters, letters/numbers/underscores only."})
+		return
+	}
+	// check uniqueness
+	var existing models.User
+	if database.DB.Where("username = ? AND id != ?", username, userID).First(&existing).Error == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "That username is already taken."})
+		return
+	}
+	if err := database.DB.Model(&models.User{}).Where("id = ?", userID).Update("username", username).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save username."})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"username": username})
 }
 
 // ─── PATCH /v1/user/onboarding ────────────────────────────────────────────────
