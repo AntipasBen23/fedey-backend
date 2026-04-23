@@ -47,6 +47,28 @@ func RequireAuth() gin.HandlerFunc {
 			return []byte(secret), nil
 		})
 
+		// LOGIC UPDATE: Even if the token is expired, we want to know WHO it was 
+		// so we can check if they were deleted by an admin.
+		if err != nil {
+			// Try to parse without validation to get the UserID claims
+			unverifiedToken, _, parseErr := new(jwt.Parser).ParseUnverified(tokenStr, jwt.MapClaims{})
+			if parseErr == nil {
+				if claims, ok := unverifiedToken.Claims.(jwt.MapClaims); ok {
+					if sub, ok := claims["sub"].(float64); ok {
+						var user models.User
+						// If the user is missing (hard deleted) or soft-deleted, send the 'deleted' flag
+						if database.DB.Unscoped().First(&user, uint(sub)).Error != nil || user.DeletedAt.Valid {
+							c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+								"error": "Account no longer exists.", 
+								"deleted": true,
+							})
+							return
+						}
+					}
+				}
+			}
+		}
+
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session. Please log in again."})
 			return
