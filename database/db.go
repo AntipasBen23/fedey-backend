@@ -31,6 +31,9 @@ func InitDB() {
 	db.Exec("ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS user_id bigint")
 	db.Exec("ALTER TABLE content_calendars ADD COLUMN IF NOT EXISTS user_id bigint")
 	db.Exec("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS user_id bigint")
+	db.Exec("ALTER TABLE user_strategies ADD COLUMN IF NOT EXISTS user_id bigint")
+	db.Exec("ALTER TABLE follower_snapshots ADD COLUMN IF NOT EXISTS user_id bigint")
+	db.Exec("ALTER TABLE engagement_events ADD COLUMN IF NOT EXISTS user_id bigint")
 	
 	// Backfill: Assign orphaned records to the first admin/user found in the DB.
 	// If no user exists yet, it will remain NULL until the first user is created.
@@ -41,6 +44,9 @@ func InitDB() {
 	db.Exec(fmt.Sprintf(backfillSQL, "social_accounts"))
 	db.Exec(fmt.Sprintf(backfillSQL, "content_calendars"))
 	db.Exec(fmt.Sprintf(backfillSQL, "scheduled_posts"))
+	db.Exec(fmt.Sprintf(backfillSQL, "user_strategies"))
+	db.Exec(fmt.Sprintf(backfillSQL, "follower_snapshots"))
+	db.Exec(fmt.Sprintf(backfillSQL, "engagement_events"))
 
 	err = db.AutoMigrate(
 		&models.SocialAccount{},
