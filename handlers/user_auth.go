@@ -611,23 +611,37 @@ func GoogleAuthHandler(c *gin.Context) {
 	var user models.User
 	result := database.DB.Where("email = ?", gData.Email).First(&user)
 	if result.Error != nil {
-		// Reject if admin deleted this account — do not restore it
+		// If soft-deleted, restore as a fresh user — wipe onboarding so they start from scratch
 		var deleted models.User
 		if database.DB.Unscoped().Where("email = ?", gData.Email).First(&deleted).Error == nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "This account has been removed. Please contact support."})
-			return
-		}
-		// Truly new user via Google
-		user = models.User{
-			Name:       gData.Name,
-			Email:      gData.Email,
-			GoogleID:   gData.Sub,
-			IsVerified: true,
-			Plan:       "free",
-		}
-		if err := database.DB.Create(&user).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
-			return
+			if err := database.DB.Unscoped().Model(&deleted).Updates(map[string]interface{}{
+				"deleted_at":           nil,
+				"google_id":            gData.Sub,
+				"is_verified":          true,
+				"name":                 gData.Name,
+				"plan":                 "free",
+				"last_onboarding_step": "",
+				"job_description":      "",
+				"platform_context":     "",
+			}).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				return
+			}
+			user = deleted
+			user.LastOnboardingStep = ""
+		} else {
+			// Truly new user via Google
+			user = models.User{
+				Name:       gData.Name,
+				Email:      gData.Email,
+				GoogleID:   gData.Sub,
+				IsVerified: true,
+				Plan:       "free",
+			}
+			if err := database.DB.Create(&user).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				return
+			}
 		}
 	} else if user.GoogleID == "" {
 		// Existing email-password user — link Google to their account
