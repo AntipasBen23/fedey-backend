@@ -303,7 +303,7 @@ func SyncAnalyticsHandler(c *gin.Context) {
 		}
 		
 		// Ensure we always save at least a small number of impressions if the post exists
-		if impressions == 0 && posted {
+		if impressions == 0 && post.Status == "posted" {
 			impressions = 1 // At least 1 (the user themselves)
 		}
 
