@@ -77,8 +77,10 @@ type ScheduledPost struct {
 	Day           int            `json:"day"`
 	ScheduledAt   time.Time      `json:"scheduledAt"`
 	Status        string         `gorm:"default:'pending'" json:"status"` // 'pending', 'posted', 'failed'
-	ExternalID    string         `json:"externalId"`    // The ID from X/LinkedIn after posting
-	FailureReason string         `json:"failureReason"` // Error detail when status = 'failed'
+	ExternalID      string         `json:"externalId"`      // The ID from X/LinkedIn after posting
+	FailureReason   string         `json:"failureReason"`   // Error detail when status = 'failed'
+	Source          string         `gorm:"default:'manual'" json:"source"` // 'manual', 'intelligence', 'synergy', 'strategist'
+	SynergySourceID *uint          `gorm:"index" json:"synergySourceId"`   // ID of the original post this was repurposed from
 	AIReasoning   string         `json:"aiReasoning"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`

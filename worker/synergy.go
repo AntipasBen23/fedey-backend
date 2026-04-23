@@ -36,31 +36,34 @@ func spreadTheWin(post models.ScheduledPost) {
 	var otherAccs []models.SocialAccount
 	database.DB.Where("user_id = ? AND id != ?", post.UserID, post.AccountID).Find(&otherAccs)
 
-	for _, acc := range otherAccs {
-		// Check if we already have a post for this account today
-		var existing int64
-		database.DB.Model(&models.ScheduledPost{}).Where("account_id = ? AND created_at >= ?", acc.ID, time.Now().Add(-12*time.Hour)).Count(&existing)
-		if existing > 0 {
-			continue // Already active
-		}
+	var strategy models.UserStrategy
+	database.DB.Where("user_id = ?", post.UserID).Order("created_at desc").First(&strategy)
 
-		// Repurpose!
-		var strategy models.UserStrategy
-		database.DB.Where("user_id = ?", post.UserID).Order("created_at desc").First(&strategy)
+	for _, acc := range otherAccs {
+		// Dedup: skip if we already created a synergy post from this exact source post for this account
+		var existing int64
+		database.DB.Model(&models.ScheduledPost{}).
+			Where("account_id = ? AND synergy_source_id = ?", acc.ID, post.ID).
+			Count(&existing)
+		if existing > 0 {
+			continue
+		}
 
 		refactored, err := utils.RepurposeContent(post.Content, post.Platform, acc.Platform, strategy.IdentityAudit)
 		if err != nil {
 			continue
 		}
 
+		sourceID := post.ID
 		newPost := models.ScheduledPost{
-			UserID:      post.UserID,
-			AccountID:   acc.ID,
-			Platform:    acc.Platform,
-			Content:     refactored,
-			Status:      "pending",
-			ScheduledAt: time.Now().Add(6 * time.Hour),
-			FailureReason: "AUTONOMOUS SYNERGY DRAFT",
+			UserID:          post.UserID,
+			AccountID:       acc.ID,
+			Platform:        acc.Platform,
+			Content:         refactored,
+			Status:          "pending",
+			ScheduledAt:     time.Now().Add(6 * time.Hour),
+			Source:          "synergy",
+			SynergySourceID: &sourceID,
 		}
 		database.DB.Create(&newPost)
 		log.Printf("[SynergyMatrix] SYNERGIZED winner %d to platform %s for user %d", post.ID, acc.Platform, post.UserID)

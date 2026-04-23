@@ -62,8 +62,8 @@ func RunIntelligenceHub() {
 			Platform:    acc.Platform,
 			Content:     draftTake,
 			Status:      "pending",
-			ScheduledAt: time.Now().Add(4 * time.Hour), // Schedule for soon
-			FailureReason: "AUTONOMOUS TREND DRAFT", // Mark it so they know Furci did it
+			ScheduledAt: time.Now().Add(4 * time.Hour),
+			Source:      "intelligence",
 		}
 		
 		// Check if we already drafted something for this news today to avoid spam
