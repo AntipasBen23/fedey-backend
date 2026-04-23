@@ -120,6 +120,9 @@ func main() {
 		v1.GET("/plan", middleware.RequireAuth(), handlers.GetPlanHandler)
 		v1.POST("/plan/upgrade", middleware.RequireAuth(), handlers.UpgradePlanHandler)
 
+		// Synergy & Omnipresence
+		v1.POST("/synergy/repurpose", middleware.RequireAuth(), handlers.RepurposePostHandler)
+
 		// Video Generation
 		v1.POST("/video/template", middleware.RequireAuth(), handlers.GenerateTemplateVideoHandler)
 		v1.POST("/video/generate", middleware.RequireAuth(), handlers.GenerateVideoHandler)

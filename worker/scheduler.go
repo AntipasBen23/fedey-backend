@@ -16,6 +16,7 @@ func StartScheduler() {
 	ticker := time.NewTicker(1 * time.Minute)
 	listeningTicker := time.NewTicker(15 * time.Minute) // Social listening every 15 mins
 	intelTicker := time.NewTicker(4 * time.Hour)       // Intelligence Hub every 4 hours
+	synergyTicker := time.NewTicker(12 * time.Hour)     // Synergy Matrix every 12 hours
 
 	go func() {
 		lastReportDate := ""
@@ -40,6 +41,8 @@ func StartScheduler() {
 				}
 			case <-intelTicker.C:
 				RunIntelligenceHub()
+			case <-synergyTicker.C:
+				RunSynergyMatrix()
 			case <-listeningTicker.C:
 				RunSocialListening()
 			}
