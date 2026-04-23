@@ -36,6 +36,19 @@ type ContentCalendar struct {
 }
 
 // ScheduledPost represents a discrete posting event for the background worker
+// InteractionProfile stores memory about specific people we talk to
+type InteractionProfile struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	AccountID     uint      `gorm:"index" json:"accountId"`
+	ExternalHandle string    `gorm:"index" json:"externalHandle"`
+	Description    string    `json:"description"`
+	Sentiments     string    `json:"sentiments"` // JSON or text summary of our history
+	RelationshipScore int    `json:"relationshipScore"`
+	LastInteraction time.Time `json:"lastInteraction"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
 type ScheduledPost struct {
 	ID            uint           `gorm:"primaryKey" json:"id"`
 	UserID        uint           `gorm:"index;not null" json:"userId"`

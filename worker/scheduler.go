@@ -112,13 +112,31 @@ func processIncomingEnagement(acc models.SocialAccount, raw map[string]interface
 	}
 
 	log.Printf("[GhostOperator] New %s found: %s", engType, postID)
+	
+	// 1. Fetch/Create Interaction Memory
+	var profile models.InteractionProfile
+	database.DB.FirstOrCreate(&profile, models.InteractionProfile{
+		AccountID:      acc.ID,
+		ExternalHandle: authorID,
+	})
 
-	// Draft AI Reply
-	reply, err := utils.DraftEngagementReply(content, authorID, niche)
+	// 2. Draft AI Reply with Memory
+	reply, err := utils.DraftEngagementReply(content, authorID, niche, profile.Sentiments)
 	if err != nil {
 		log.Printf("[GhostOperator] AI Drafting failed: %v", err)
 		return
 	}
+
+	// 3. Update Profile Memory (Recursive Learning)
+	newSentiment := fmt.Sprintf("%s\n- %s: %s", profile.Sentiments, time.Now().Format("Jan 02"), content)
+	if len(newSentiment) > 1000 {
+		newSentiment = newSentiment[len(newSentiment)-1000:] // Cap memory
+	}
+	database.DB.Model(&profile).Updates(map[string]interface{}{
+		"sentiments":         newSentiment,
+		"relationship_score": profile.RelationshipScore + 1,
+		"last_interaction":   time.Now(),
+	})
 
 	event := models.EngagementEvent{
 		AccountID:       acc.ID,

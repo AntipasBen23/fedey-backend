@@ -57,6 +57,7 @@ func InitDB() {
 		&models.UserPreferences{},
 		&models.FollowerSnapshot{},
 		&models.EngagementEvent{},
+		&models.InteractionProfile{},
 		// Auth models
 		&models.User{},
 		&models.EmailVerification{},
