@@ -45,3 +45,29 @@ Return ONLY the reply text.`, niche, authorHandle, originalText)
 
 	return resp.Choices[0].Message.Content, nil
 }
+
+// GenerateAIResponse is a general helper for getting a completion from OpenAI
+func GenerateAIResponse(prompt string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY missing")
+	}
+
+	client := openai.NewClient(apiKey)
+	
+	resp, err := client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: openai.GPT4oMini,
+			Messages: []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleUser, Content: prompt},
+			},
+		},
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}
