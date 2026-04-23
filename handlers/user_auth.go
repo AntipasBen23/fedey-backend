@@ -19,6 +19,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -159,53 +160,6 @@ func issueRefreshToken(userID uint, rememberMe bool) (string, time.Time, error) 
 	return token, exp, nil
 }
 
-// ─── Email helper (Resend) ────────────────────────────────────────────────────
-
-// sendEmail sends an HTML email via the Resend API.
-// Requires RESEND_API_KEY and optionally RESEND_FROM (defaults to onboarding@resend.dev for testing).
-func sendEmail(to, subject, htmlBody string) error {
-	apiKey := os.Getenv("RESEND_API_KEY")
-	if apiKey == "" {
-		log.Printf("[Email] RESEND_API_KEY not set — would have sent to %s: %s", to, subject)
-		return nil // non-fatal in dev
-	}
-
-	from := os.Getenv("RESEND_FROM")
-	if from == "" {
-		from = "Furci.ai <onboarding@resend.dev>"
-	}
-
-	payload := map[string]interface{}{
-		"from":    from,
-		"to":      []string{to},
-		"subject": subject,
-		"html":    htmlBody,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Resend API error %d: %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
 func sendVerificationEmail(email, name, code string) {
 	body := fmt.Sprintf(`
 <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:2rem">
@@ -214,7 +168,7 @@ func sendVerificationEmail(email, name, code string) {
   <div style="font-size:2.5rem;font-weight:900;letter-spacing:0.25em;color:#111;background:#f3f4f6;border-radius:12px;padding:1rem;text-align:center">%s</div>
   <p style="color:#6b7280;font-size:0.9rem">This code expires in 15 minutes. If you didn't sign up for Furci.ai, you can safely ignore this email.</p>
 </div>`, name, code)
-	if err := sendEmail(email, "Your Furci.ai verification code", body); err != nil {
+	if err := utils.SendEmail(email, "Your Furci.ai verification code", body); err != nil {
 		log.Printf("[Email] Failed to send verification to %s: %v", email, err)
 	}
 }
@@ -232,7 +186,7 @@ func sendPasswordResetEmail(email, name, token string) {
   <a href="%s" style="display:inline-block;background:#4f46e5;color:#fff;padding:0.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:700;margin:1rem 0">Reset Password</a>
   <p style="color:#6b7280;font-size:0.9rem">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
 </div>`, name, link)
-	if err := sendEmail(email, "Reset your Furci.ai password", body); err != nil {
+	if err := utils.SendEmail(email, "Reset your Furci.ai password", body); err != nil {
 		log.Printf("[Email] Failed to send password reset to %s: %v", email, err)
 	}
 }

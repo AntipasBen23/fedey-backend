@@ -1,72 +1,57 @@
 package utils
 
 import (
-	"crypto/tls"
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"net/smtp"
+	"io"
+	"log"
+	"net/http"
 	"os"
+	"time"
 )
 
-// SendEmail sends an HTML email via SMTP
-func SendEmail(to string, subject string, body string) error {
-	host := os.Getenv("SMTP_HOST") // e.g. smtp.gmail.com
-	port := os.Getenv("SMTP_PORT") // e.g. 587
-	user := os.Getenv("SMTP_USER")
-	pass := os.Getenv("SMTP_PASS")
-
-	if host == "" || port == "" || user == "" || pass == "" {
-		return fmt.Errorf("SMTP configuration missing in environment variables")
+// SendEmail sends an HTML email via the Resend API.
+// Requires RESEND_API_KEY and optionally RESEND_FROM.
+func SendEmail(to, subject, htmlBody string) error {
+	apiKey := os.Getenv("RESEND_API_KEY")
+	if apiKey == "" {
+		log.Printf("[Email] RESEND_API_KEY not set — would have sent to %s: %s", to, subject)
+		return nil // non-fatal in dev
 	}
 
-	auth := smtp.PlainAuth("", user, pass, host)
-
-	// Build the message
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
-	subjectHeader := "Subject: " + subject + "\n"
-	msg := []byte(subjectHeader + mime + body)
-
-	// Gmail requires TLS
-	addr := host + ":" + port
-	
-	// Use standard StartTLS
-	config := &tls.Config{InsecureSkipVerify: true, ServerName: host}
-	
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	if err = c.StartTLS(config); err != nil {
-		return err
+	from := os.Getenv("RESEND_FROM")
+	if from == "" {
+		from = "Furci.ai <onboarding@resend.dev>"
 	}
 
-	if err = c.Auth(auth); err != nil {
-		return err
+	payload := map[string]interface{}{
+		"from":    from,
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
 	}
-
-	if err = c.Mail(user); err != nil {
-		return err
-	}
-
-	if err = c.Rcpt(to); err != nil {
-		return err
-	}
-
-	w, err := c.Data()
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write(msg)
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
-	err = w.Close()
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
-	return c.Quit()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Resend API error %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
 }
