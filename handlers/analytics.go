@@ -288,13 +288,23 @@ func SyncAnalyticsHandler(c *gin.Context) {
 
 		total := t.PublicMetrics.LikeCount + t.PublicMetrics.RetweetCount + t.PublicMetrics.ReplyCount
 		impressions := t.PublicMetrics.ImpressionCount
+		
+		// DEBUG: Log the raw numbers we got from Twitter
+		log.Printf("[Analytics] Post %d (ext: %s) -> Likes: %d, Reposts: %d, Impressions: %d", 
+			post.ID, t.ID, t.PublicMetrics.LikeCount, t.PublicMetrics.RetweetCount, impressions)
+
 		engRate := 0.0
 		if impressions > 0 {
 			engRate = float64(total) / float64(impressions) * 100
 		} else if total > 0 {
-			// Estimate if impressions not available
-			impressions = total * 30
+			// Fallback estimate if impressions is somehow missing but likes exist
+			impressions = total * 30 
 			engRate = float64(total) / float64(impressions) * 100
+		}
+		
+		// Ensure we always save at least a small number of impressions if the post exists
+		if impressions == 0 && posted {
+			impressions = 1 // At least 1 (the user themselves)
 		}
 
 		analytics := models.PostAnalytics{
