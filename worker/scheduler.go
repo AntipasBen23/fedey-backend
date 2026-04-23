@@ -15,6 +15,7 @@ import (
 func StartScheduler() {
 	ticker := time.NewTicker(1 * time.Minute)
 	listeningTicker := time.NewTicker(15 * time.Minute) // Social listening every 15 mins
+	intelTicker := time.NewTicker(4 * time.Hour)       // Intelligence Hub every 4 hours
 
 	go func() {
 		lastReportDate := ""
@@ -37,6 +38,8 @@ func StartScheduler() {
 					SendDailyReports()
 					lastReportDate = today
 				}
+			case <-intelTicker.C:
+				RunIntelligenceHub()
 			case <-listeningTicker.C:
 				RunSocialListening()
 			}
