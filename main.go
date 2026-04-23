@@ -30,7 +30,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	v1 := r.Group("/v1")
+	v1 := r.Group("/v1", middleware.RateLimiter())
 	{
 		// ── Page tracking (public) ─────────────────────────────────────────
 		v1.POST("/track", handlers.TrackPageViewHandler)
@@ -72,36 +72,36 @@ func main() {
 		v1.PATCH("/user/username", middleware.RequireAuth(), handlers.SetUsernameHandler)
 
 		// ── Protected app routes ────────────────────────────────────────────────
-		v1.POST("/analyze", middleware.RequireAuth(), handlers.AnalyzeHandler)
+		v1.POST("/analyze", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.AnalyzeHandler)
 		v1.POST("/auth/callback", middleware.RequireAuth(), handlers.AuthCallbackHandler)
 		v1.DELETE("/auth/disconnect", middleware.RequireAuth(), handlers.DisconnectHandler)
-		v1.POST("/strategy", middleware.RequireAuth(), handlers.StrategyHandler)
-		v1.POST("/strategy/refine", middleware.RequireAuth(), handlers.StrategyRefineHandler)
-		v1.POST("/calendar", middleware.RequireAuth(), handlers.CalendarHandler)
+		v1.POST("/strategy", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.StrategyHandler)
+		v1.POST("/strategy/refine", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.StrategyRefineHandler)
+		v1.POST("/calendar", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.CalendarHandler)
 		v1.GET("/calendar/status", middleware.RequireAuth(), handlers.GetCalendarStatusHandler)
 		v1.POST("/calendar/approve", middleware.RequireAuth(), handlers.ApproveCalendarHandler)
 		v1.GET("/dashboard", middleware.RequireAuth(), handlers.GetDashboardHandler)
 		v1.POST("/settings/autopilot", middleware.RequireAuth(), handlers.ToggleAutoPilotHandler)
-		v1.POST("/revise", middleware.RequireAuth(), handlers.ReviseHandler)
+		v1.POST("/revise", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.ReviseHandler)
 
 		// Trends & Social Listening
 		v1.GET("/trends", middleware.RequireAuth(), handlers.GetTrendsHandler)
-		v1.POST("/trends/react", middleware.RequireAuth(), handlers.ReactToTrendHandler)
+		v1.POST("/trends/react", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.ReactToTrendHandler)
 		v1.POST("/trends/react/schedule", middleware.RequireAuth(), handlers.ScheduleReactionHandler)
 
 		// Analytics
 		v1.GET("/analytics", middleware.RequireAuth(), handlers.GetAnalyticsHandler)
-		v1.POST("/analytics/sync", middleware.RequireAuth(), handlers.SyncAnalyticsHandler)
+		v1.POST("/analytics/sync", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.SyncAnalyticsHandler)
 		v1.GET("/analytics/peak-hours", middleware.RequireAuth(), handlers.GetPeakHoursHandler)
 
 		// Posts Management
 		v1.PUT("/posts/:id", middleware.RequireAuth(), handlers.UpdatePostHandler)
 		v1.DELETE("/posts/:id", middleware.RequireAuth(), handlers.DeletePostHandler)
 		v1.POST("/posts", middleware.RequireAuth(), handlers.CreatePostHandler)
-		v1.POST("/posts/polish", middleware.RequireAuth(), handlers.AIPolishHandler)
+		v1.POST("/posts/polish", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.AIPolishHandler)
 
 		// Conversational AI
-		v1.POST("/chat", middleware.RequireAuth(), handlers.ChatWithFurciHandler)
+		v1.POST("/chat", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.ChatWithFurciHandler)
 
 		// Engagement & Ghost Operator
 		v1.GET("/engagements", middleware.RequireAuth(), handlers.GetEngagementsHandler)
@@ -109,11 +109,11 @@ func main() {
 		v1.POST("/settings/ghost-mode", middleware.RequireAuth(), handlers.ToggleGhostModeHandler)
 
 		// Script Engine
-		v1.POST("/scripts/generate", middleware.RequireAuth(), handlers.GenerateScriptHandler)
+		v1.POST("/scripts/generate", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.GenerateScriptHandler)
 
 		// Carousel
-		v1.POST("/carousel/images", middleware.RequireAuth(), handlers.GenerateCarouselImagesHandler)
-		v1.POST("/carousel/design", middleware.RequireAuth(), handlers.GenerateCarouselDesignHandler)
+		v1.POST("/carousel/images", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.GenerateCarouselImagesHandler)
+		v1.POST("/carousel/design", middleware.RequireAuth(), middleware.ExpensiveActionLimiter(), handlers.GenerateCarouselDesignHandler)
 
 		// Plan management
 		v1.GET("/plan", middleware.RequireAuth(), handlers.GetPlanHandler)
