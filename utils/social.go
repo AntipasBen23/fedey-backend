@@ -283,6 +283,34 @@ func GetXMentions(token, userID string) ([]map[string]interface{}, error) {
 	return result.Data, nil
 }
 
+// GetXMentions fetches the latest mentions for the authenticated user.
+func GetXRecentReplies(token, userID string) ([]map[string]interface{}, error) {
+	// We search for conversations involving us
+	url := fmt.Sprintf("https://api.twitter.com/2/tweets/search/recent?query=to:%s&tweet.fields=author_id,in_reply_to_user_id,conversation_id", userID)
+	
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer " + token)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(readAll(resp.Body), &result); err != nil {
+		return nil, err
+	}
+
+	return result.Data, nil
+}
+
 func readAll(r io.Reader) []byte {
 	b, _ := io.ReadAll(r)
 	return b

@@ -86,6 +86,11 @@ func RunSocialListening() {
 			processIncomingEnagement(acc, m, "mention", niche, handle)
 		}
 
+		replies, _ := utils.GetXRecentReplies(acc.AccessToken, handle)
+		for _, r := range replies {
+			processIncomingEnagement(acc, r, "comment", niche, handle)
+		}
+
 		// 3. Niche Discovery (Proactive networking)
 		keywords := []string{"SaaS", "Growth", "Solopreneur"} // Ideally parsed from strategy
 		if len(keywords) > 0 {
