@@ -276,7 +276,8 @@ func AdminDeleteUserHandler(c *gin.Context) {
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.ScheduledPost{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.UserStrategy{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.EngagementEvent{})
-	database.DB.Where("user_id = ?", user.ID).Delete(&models.FollowerSnapshot{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.FollowerSnapshot{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.PostAnalytics{})
 
 	database.DB.Delete(&user)
 
