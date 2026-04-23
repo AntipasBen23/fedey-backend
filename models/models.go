@@ -58,6 +58,7 @@ type ScheduledPost struct {
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	Analytics     *PostAnalytics `gorm:"foreignKey:ScheduledPostID" json:"analytics,omitempty"`
 }
 
 // PostAnalytics stores engagement data for a specific post

@@ -39,7 +39,7 @@ func GetDashboardHandler(c *gin.Context) {
 
 	// 2. History: posted + failed — most recent 20
 	var history []models.ScheduledPost
-	if err := database.DB.Where("user_id = ? AND status IN ?", uid, []string{"posted", "failed"}).
+	if err := database.DB.Preload("Analytics").Where("user_id = ? AND status IN ?", uid, []string{"posted", "failed"}).
 		Order("scheduled_at desc").Limit(20).Find(&history).Error; err != nil {
 		history = []models.ScheduledPost{}
 	}
