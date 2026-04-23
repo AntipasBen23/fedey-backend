@@ -49,6 +49,18 @@ type InteractionProfile struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
+// CompetitorProfile tracks industry rivals for strategic counter-play
+type CompetitorProfile struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	UserID        uint      `gorm:"index" json:"userId"`
+	ExternalHandle string    `gorm:"index" json:"externalHandle"`
+	Platform      string    `json:"platform"`
+	LastViralPostID string    `json:"lastViralPostId"`
+	Insights      string    `json:"insights"` // AI-generated breakdown of their win
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
 type ScheduledPost struct {
 	ID            uint           `gorm:"primaryKey" json:"id"`
 	UserID        uint           `gorm:"index;not null" json:"userId"`
