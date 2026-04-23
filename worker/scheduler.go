@@ -26,6 +26,13 @@ func StartScheduler() {
 				// Daily Progress Report check
 				now := time.Now()
 				today := now.Format("2006-01-02")
+				
+				// 1:00 AM -> Strategic Optimization
+				if now.Hour() == 1 && now.Minute() == 0 && lastReportDate != today {
+					RunStrategicOptimization()
+				}
+
+				// 23:30 -> Daily Progress Report
 				if now.Hour() == 23 && now.Minute() == 30 && lastReportDate != today {
 					SendDailyReports()
 					lastReportDate = today

@@ -20,6 +20,11 @@ func TestDailyReportHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Daily report cycle triggered in background."})
 }
 
+func TestStrategistHandler(c *gin.Context) {
+	go worker.RunStrategicOptimization()
+	c.JSON(http.StatusOK, gin.H{"message": "Strategic optimization cycle triggered in background."})
+}
+
 // ─── Admin JWT ────────────────────────────────────────────────────────────────
 
 func adminSecret() []byte {
