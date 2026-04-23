@@ -35,7 +35,17 @@ func AuthCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Use Atomic Upsert (On Conflict) to handle potential race conditions from double-clicks
+	// LONG-TERM FIX: If this platform/type combination already exists for ANY user,
+	// we re-assign it to the CURRENT user. This fixes issues where backfill 
+	// scripts or previous tests assigned the account to the wrong user ID.
+	var existing models.SocialAccount
+	err := database.DB.Where("platform = ? AND account_type = ?", req.Platform, req.AccountType).First(&existing).Error
+	if err == nil && existing.UserID != uid {
+		fmt.Printf("[AUTH] Re-assigning %s account from User %d to User %d\n", req.Platform, existing.UserID, uid)
+		database.DB.Model(&existing).Update("user_id", uid)
+	}
+
+	// Now perform the standard Upsert for the current user
 	account := models.SocialAccount{
 		UserID:      uid,
 		Platform:    req.Platform,
@@ -43,7 +53,7 @@ func AuthCallbackHandler(c *gin.Context) {
 		AccountType: req.AccountType,
 	}
 
-	err := database.DB.Clauses(clause.OnConflict{
+	err = database.DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "platform"}, {Name: "account_type"}},
 		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at", "deleted_at"}),
 	}).Create(&account).Error
