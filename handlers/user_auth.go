@@ -306,11 +306,16 @@ func RegisterHandler(c *gin.Context) {
 		return
 	}
 
-	// Check if email is taken — return the same response regardless so
-	// an attacker cannot enumerate which emails are registered.
+	// Check if email is taken — use Unscoped() to also find soft-deleted records,
+	// which would otherwise cause a duplicate key error on INSERT.
 	var existing models.User
-	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
-		if !existing.IsVerified {
+	if database.DB.Unscoped().Where("email = ?", req.Email).First(&existing).Error == nil {
+		if existing.DeletedAt.Valid {
+			// Admin deleted this account — permanently erase the tombstone so the
+			// email is freed and a fresh registration can proceed normally.
+			database.DB.Unscoped().Delete(&existing)
+			// Fall through to create a fresh account below.
+		} else if !existing.IsVerified {
 			resendVerificationCode(existing)
 			// Return the same shape as a fresh registration so the UI can show the verify form.
 			c.JSON(http.StatusCreated, gin.H{
@@ -318,11 +323,12 @@ func RegisterHandler(c *gin.Context) {
 				"userId":            existing.ID,
 				"needsVerification": true,
 			})
+			return
 		} else {
-			// Verified account exists — return 200, not a specific conflict error.
+			// Verified active account — return same shape as success (no enumeration).
 			c.JSON(http.StatusOK, gin.H{"message": "Check your email for a 6-digit verification code."})
+			return
 		}
-		return
 	}
 
 	// Hash password
