@@ -111,6 +111,20 @@ func AdminTriggerOutreachHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Onboarding outreach scan triggered."})
 }
 
+// AdminTriggerOutreachForUserHandler sends a re-engagement email to a single user.
+func AdminTriggerOutreachForUserHandler(c *gin.Context) {
+	id, err := parseInt(c.Param("id"))
+	if err != nil || id <= 0 {
+		utils.APIError(c, http.StatusBadRequest, "INVALID_ID", "Invalid user ID.")
+		return
+	}
+	if err := worker.SendOutreachToUser(uint(id)); err != nil {
+		utils.APIError(c, http.StatusBadRequest, "OUTREACH_FAILED", err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Re-engagement email sent."})
+}
+
 func parseInt(s string) (int, error) {
 	var n int
 	_, err := fmt.Sscanf(s, "%d", &n)

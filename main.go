@@ -70,6 +70,7 @@ func main() {
 			admin.GET("/outreach/incomplete", handlers.AdminIncompleteUsersHandler)
 			admin.GET("/outreach/completed", handlers.AdminCompletedOnboardingHandler)
 			admin.POST("/outreach/trigger", handlers.AdminTriggerOutreachHandler)
+			admin.POST("/outreach/trigger/:id", handlers.AdminTriggerOutreachForUserHandler)
 		}
 
 		// ── Public auth routes ──────────────────────────────────────────────

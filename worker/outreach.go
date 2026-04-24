@@ -40,24 +40,43 @@ func RunOnboardingOutreach() {
 			continue
 		}
 
-		body := buildOutreachEmail(user.Name)
-		subject := "We noticed you started setting up your Furci AI account"
-
-		if err := utils.SendEmail(user.Email, subject, body); err != nil {
+		if err := sendOutreachToUser(user); err != nil {
 			log.Printf("[Outreach] Failed to send to %s: %v", user.Email, err)
-			continue
 		}
-
-		database.DB.Create(&models.OnboardingOutreach{
-			UserID:    user.ID,
-			UserEmail: user.Email,
-			UserName:  user.Name,
-			StoppedAt: user.LastOnboardingStep,
-			SentAt:    time.Now(),
-		})
-
-		log.Printf("[Outreach] Re-engagement email sent to %s (stopped at %s)", user.Email, user.LastOnboardingStep)
 	}
+}
+
+// SendOutreachToUser sends a re-engagement email to a single user and logs it.
+// Returns an error if the user is not eligible or the send fails.
+func SendOutreachToUser(userID uint) error {
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+	if !user.IsVerified || user.LastOnboardingStep == "" || user.LastOnboardingStep == "completed" {
+		return fmt.Errorf("user is not eligible for outreach")
+	}
+	return sendOutreachToUser(user)
+}
+
+func sendOutreachToUser(user models.User) error {
+	body := buildOutreachEmail(user.Name)
+	subject := "We noticed you started setting up your Furci AI account"
+
+	if err := utils.SendEmail(user.Email, subject, body); err != nil {
+		return err
+	}
+
+	database.DB.Create(&models.OnboardingOutreach{
+		UserID:    user.ID,
+		UserEmail: user.Email,
+		UserName:  user.Name,
+		StoppedAt: user.LastOnboardingStep,
+		SentAt:    time.Now(),
+	})
+
+	log.Printf("[Outreach] Re-engagement email sent to %s (stopped at %s)", user.Email, user.LastOnboardingStep)
+	return nil
 }
 
 func buildOutreachEmail(name string) string {
