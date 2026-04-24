@@ -69,6 +69,42 @@ func AdminIncompleteUsersHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"total": len(result), "users": result})
 }
 
+// AdminCompletedOnboardingHandler returns all users who finished onboarding,
+// highlighting those who completed after receiving an outreach email.
+func AdminCompletedOnboardingHandler(c *gin.Context) {
+	var users []models.User
+	if err := database.DB.
+		Where("last_onboarding_step = 'completed'").
+		Order("updated_at desc").
+		Find(&users).Error; err != nil {
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to fetch completed users.")
+		return
+	}
+
+	type row struct {
+		ID             uint   `json:"id"`
+		Name           string `json:"name"`
+		Email          string `json:"email"`
+		CompletedAt    string `json:"completedAt"`
+		ReceivedOutreach bool `json:"receivedOutreach"`
+	}
+
+	result := make([]row, len(users))
+	for i, u := range users {
+		var outreachCount int64
+		database.DB.Model(&models.OnboardingOutreach{}).Where("user_id = ?", u.ID).Count(&outreachCount)
+		result[i] = row{
+			ID:               u.ID,
+			Name:             u.Name,
+			Email:            u.Email,
+			CompletedAt:      u.UpdatedAt.Format("2006-01-02 15:04"),
+			ReceivedOutreach: outreachCount > 0,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"total": len(result), "users": result})
+}
+
 // AdminTriggerOutreachHandler lets the admin manually fire the outreach scan.
 func AdminTriggerOutreachHandler(c *gin.Context) {
 	go worker.RunOnboardingOutreach()
