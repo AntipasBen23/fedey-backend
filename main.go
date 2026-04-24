@@ -67,6 +67,7 @@ func main() {
 			admin.POST("/reports/test", handlers.TestDailyReportHandler)
 			admin.POST("/strategist/test", handlers.TestStrategistHandler)
 			admin.GET("/outreach", handlers.AdminOutreachLogsHandler)
+			admin.GET("/outreach/incomplete", handlers.AdminIncompleteUsersHandler)
 			admin.POST("/outreach/trigger", handlers.AdminTriggerOutreachHandler)
 		}
 

@@ -36,6 +36,39 @@ func AdminOutreachLogsHandler(c *gin.Context) {
 	})
 }
 
+// AdminIncompleteUsersHandler returns all users who started onboarding but never finished.
+func AdminIncompleteUsersHandler(c *gin.Context) {
+	var users []models.User
+	if err := database.DB.
+		Where("is_verified = true").
+		Where("last_onboarding_step != '' AND last_onboarding_step != 'completed'").
+		Order("created_at desc").
+		Find(&users).Error; err != nil {
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to fetch incomplete users.")
+		return
+	}
+
+	type row struct {
+		ID        uint   `json:"id"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		StoppedAt string `json:"stoppedAt"`
+		CreatedAt string `json:"createdAt"`
+	}
+	result := make([]row, len(users))
+	for i, u := range users {
+		result[i] = row{
+			ID:        u.ID,
+			Name:      u.Name,
+			Email:     u.Email,
+			StoppedAt: u.LastOnboardingStep,
+			CreatedAt: u.CreatedAt.Format("2006-01-02 15:04"),
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"total": len(result), "users": result})
+}
+
 // AdminTriggerOutreachHandler lets the admin manually fire the outreach scan.
 func AdminTriggerOutreachHandler(c *gin.Context) {
 	go worker.RunOnboardingOutreach()
