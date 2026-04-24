@@ -114,8 +114,9 @@ func processIncomingEnagement(acc models.SocialAccount, raw map[string]interface
 	}
 
 	// Check if already processed
-	var existing models.EngagementEvent
-	if err := database.DB.Where("external_post_id = ?", postID).First(&existing).Error; err == nil {
+	var count int64
+	database.DB.Model(&models.EngagementEvent{}).Where("external_post_id = ?", postID).Count(&count)
+	if count > 0 {
 		return // Already handled
 	}
 
