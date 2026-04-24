@@ -11,6 +11,20 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// expireAuthCookies clears the httpOnly auth cookies in the response so the
+// browser drops them before the next request, breaking any retry loop.
+func expireAuthCookies(c *gin.Context) {
+	isProduction := os.Getenv("GIN_MODE") == "release" ||
+		os.Getenv("RAILWAY_ENVIRONMENT") != "" ||
+		os.Getenv("COOKIE_SECURE") == "true"
+	attrs := "; HttpOnly; SameSite=Lax"
+	if isProduction {
+		attrs = "; HttpOnly; Secure; SameSite=Lax"
+	}
+	c.Writer.Header().Add("Set-Cookie", "furci_access=; Path=/; Max-Age=0"+attrs)
+	c.Writer.Header().Add("Set-Cookie", "furci_refresh=; Path=/; Max-Age=0"+attrs)
+}
+
 // RequireAuth validates the JWT and confirms the user still exists in the DB.
 // It reads the token from the httpOnly cookie "furci_access" first,
 // then falls back to the Authorization: Bearer header (for admin panel / API clients).
@@ -57,6 +71,7 @@ func RequireAuth() gin.HandlerFunc {
 						var user models.User
 						// If the user is missing (hard deleted) or soft-deleted, send the 'deleted' flag
 						if database.DB.Unscoped().First(&user, uint(sub)).Error != nil || user.DeletedAt.Valid {
+							expireAuthCookies(c)
 							c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 								"error":   gin.H{"code": "AUTH_REQUIRED", "message": "Account no longer exists."},
 								"deleted": true,
@@ -97,6 +112,7 @@ func RequireAuth() gin.HandlerFunc {
 		// Confirm the user still exists — if deleted via admin, reject immediately
 		var user models.User
 		if database.DB.First(&user, userID).Error != nil {
+			expireAuthCookies(c)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   gin.H{"code": "AUTH_REQUIRED", "message": "Account no longer exists."},
 				"deleted": true,
