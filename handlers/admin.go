@@ -11,6 +11,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/AntipasBen23/fedey-backend/worker"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -100,7 +101,7 @@ type AdminSetupRequest struct {
 func AdminSetupHandler(c *gin.Context) {
 	var req AdminSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Email and password are required.")
 		return
 	}
 
@@ -112,13 +113,13 @@ func AdminSetupHandler(c *gin.Context) {
 	// If an admin already exists, block — setup is one-time only.
 	var existing models.User
 	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Admin account already exists. Use the login endpoint."})
+		utils.APIError(c, http.StatusConflict, "CONFLICT", "Admin account already exists. Use the login endpoint.")
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Setup failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Setup failed.")
 		return
 	}
 
@@ -130,7 +131,7 @@ func AdminSetupHandler(c *gin.Context) {
 		Plan:         "pro",
 	}
 	if err := database.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create admin account."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to create admin account.")
 		return
 	}
 
@@ -152,27 +153,27 @@ type AdminLoginRequest struct {
 func AdminLoginHandler(c *gin.Context) {
 	var req AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and password are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Email and password are required.")
 		return
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := checkAdminLoginRateLimit(req.Email); err != nil {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusTooManyRequests, "RATE_LIMITED", err.Error())
 		return
 	}
 
 	var user models.User
 	if database.DB.Where("email = ?", req.Email).First(&user).Error != nil {
 		recordAdminFailedLogin(req.Email)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid credentials.")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		recordAdminFailedLogin(req.Email)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid credentials.")
 		return
 	}
 
@@ -180,7 +181,7 @@ func AdminLoginHandler(c *gin.Context) {
 
 	token, err := issueAdminToken(user.ID, user.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Login failed.")
 		return
 	}
 
@@ -310,7 +311,7 @@ func AdminDeleteUserHandler(c *gin.Context) {
 	id := c.Param("id")
 	var user models.User
 	if database.DB.First(&user, id).Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found."})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "User not found.")
 		return
 	}
 
@@ -343,11 +344,11 @@ func AdminUpdateUserPlanHandler(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdatePlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil || (req.Plan != "free" && req.Plan != "pro") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Plan must be 'free' or 'pro'."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Plan must be 'free' or 'pro'.")
 		return
 	}
 	if database.DB.Model(&models.User{}).Where("id = ?", id).Update("plan", req.Plan).Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found."})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "User not found.")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Plan updated."})

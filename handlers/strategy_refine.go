@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -44,24 +45,24 @@ Format requirements: Return ONLY a valid JSON object matching the ProfessionalSt
 func StrategyRefineHandler(c *gin.Context) {
 	var req RefineRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
 	client := openai.NewClient(apiKey)
-	prompt := fmt.Sprintf(refinePromptTemplate, 
+	prompt := fmt.Sprintf(refinePromptTemplate,
 		req.RefineMode,
-		req.ProductSummary, 
-		req.CurrentStrategy.IdentityAudit, 
-		req.CurrentStrategy.TrendMonitoring, 
-		req.CurrentStrategy.GrowthExperiments, 
-		req.CurrentStrategy.AnalyticsReporting, 
+		req.ProductSummary,
+		req.CurrentStrategy.IdentityAudit,
+		req.CurrentStrategy.TrendMonitoring,
+		req.CurrentStrategy.GrowthExperiments,
+		req.CurrentStrategy.AnalyticsReporting,
 		req.Feedback,
 		req.RefineMode,
 	)
@@ -83,14 +84,14 @@ func StrategyRefineHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refine strategy: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to refine strategy.")
 		return
 	}
 
 	var strategy ProfessionalStrategy
 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &strategy)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse refined strategy"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse refined strategy.")
 		return
 	}
 

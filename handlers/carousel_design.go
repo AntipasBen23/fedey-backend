@@ -38,30 +38,30 @@ type CarouselDesignRequest struct {
 func GenerateCarouselDesignHandler(c *gin.Context) {
 	var req CarouselDesignRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.PostID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "postId is required"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "postId is required.")
 		return
 	}
 
 	if !utils.CloudinaryEnabled() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Cloudinary is not configured"})
+		utils.APIError(c, http.StatusServiceUnavailable, "SERVER_ERROR", "Cloudinary is not configured.")
 		return
 	}
 
 	var post models.ScheduledPost
 	if err := database.DB.First(&post, req.PostID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Post not found.")
 		return
 	}
 
 	slides := carouselSlidesFromPost(post)
 	if len(slides) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not extract slides from post content"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Could not extract slides from post content.")
 		return
 	}
 
 	tmpDir, err := os.MkdirTemp("", "furci-carousel-*")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temp workspace"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to create temp workspace.")
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -77,9 +77,7 @@ func GenerateCarouselDesignHandler(c *gin.Context) {
 
 		if err := video.RenderCarouselSlide(slide, pngPath); err != nil {
 			log.Printf("[CarouselDesign] Slide %d render failed: %v", i, err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Slide %d render failed: %s", i+1, err.Error()),
-			})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", fmt.Sprintf("Slide %d render failed.", i+1))
 			return
 		}
 
@@ -87,9 +85,7 @@ func GenerateCarouselDesignHandler(c *gin.Context) {
 		url, uploadErr := utils.UploadImage(ctx, pngPath, "furci/carousel-designs", publicID)
 		if uploadErr != nil {
 			log.Printf("[CarouselDesign] Upload slide %d failed: %v", i, uploadErr)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Upload failed for slide %d: %s", i+1, uploadErr.Error()),
-			})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", fmt.Sprintf("Upload failed for slide %d.", i+1))
 			return
 		}
 

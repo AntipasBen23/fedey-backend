@@ -14,7 +14,9 @@ func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Admin authentication required."})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{"code": "AUTH_REQUIRED", "message": "Admin authentication required."},
+			})
 			return
 		}
 
@@ -29,13 +31,17 @@ func RequireAdmin() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired admin session."})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{"code": "SESSION_EXPIRED", "message": "Invalid or expired admin session."},
+			})
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok || claims["role"] != "admin" || claims["type"] != "admin" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access denied."})
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": gin.H{"code": "FORBIDDEN", "message": "Access denied."},
+			})
 			return
 		}
 

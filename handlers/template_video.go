@@ -44,33 +44,31 @@ type TemplateVideoRequest struct {
 func GenerateTemplateVideoHandler(c *gin.Context) {
 	var req TemplateVideoRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.PostID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "postId is required"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "postId is required.")
 		return
 	}
 
 	if !utils.CloudinaryEnabled() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Cloudinary is not configured — cannot store the generated video.",
-		})
+		utils.APIError(c, http.StatusServiceUnavailable, "SERVER_ERROR", "Cloudinary is not configured — cannot store the generated video.")
 		return
 	}
 
 	var post models.ScheduledPost
 	if err := database.DB.First(&post, req.PostID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Post not found.")
 		return
 	}
 
 	slides := buildSlidesFromPost(post)
 	if len(slides) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not extract slides from post content"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Could not extract slides from post content.")
 		return
 	}
 
 	// Work in a unique temp directory that is cleaned up after the request
 	tmpDir, err := os.MkdirTemp("", "furci-tmplvid-*")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temp workspace"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to create temp workspace.")
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -102,7 +100,7 @@ func GenerateTemplateVideoHandler(c *gin.Context) {
 		OutputPath: outputPath,
 	}); err != nil {
 		log.Printf("[TemplateVideo] Assembly failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Video assembly failed: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Video assembly failed.")
 		return
 	}
 
@@ -112,7 +110,7 @@ func GenerateTemplateVideoHandler(c *gin.Context) {
 	videoURL, uploadErr := utils.UploadVideo(ctx, outputPath, "furci/template-videos", publicID)
 	if uploadErr != nil {
 		log.Printf("[TemplateVideo] Cloudinary upload failed: %v", uploadErr)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed: " + uploadErr.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Upload failed.")
 		return
 	}
 

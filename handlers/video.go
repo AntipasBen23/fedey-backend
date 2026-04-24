@@ -163,28 +163,26 @@ func generateStartingFrame(promptText string) (string, error) {
 func GenerateVideoHandler(c *gin.Context) {
 	var req VideoGenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	if req.PromptText == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "promptText is required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "promptText is required.")
 		return
 	}
 
 	// AI video generation is a Pro-only feature
 	if !IsPro() {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error":    "AI video generation requires a Pro plan.",
+			"error":     gin.H{"code": "FORBIDDEN", "message": "AI video generation requires a Pro plan."},
 			"upgradeTo": "pro",
 		})
 		return
 	}
 
 	if os.Getenv("RUNWAY_API_KEY") == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Video generation is not configured. Set RUNWAY_API_KEY to enable this feature.",
-		})
+		utils.APIError(c, http.StatusServiceUnavailable, "SERVER_ERROR", "Video generation is not configured. Set RUNWAY_API_KEY to enable this feature.")
 		return
 	}
 
@@ -205,9 +203,7 @@ func GenerateVideoHandler(c *gin.Context) {
 		log.Printf("[Video] No starting frame provided — generating one with DALL-E 3")
 		generated, err := generateStartingFrame(req.PromptText)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Could not generate starting frame: " + err.Error(),
-			})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Could not generate starting frame.")
 			return
 		}
 		imageURL = generated
@@ -232,14 +228,13 @@ func GenerateVideoHandler(c *gin.Context) {
 	data, status, err := runwayRequest("POST", "/image_to_video", payload)
 	if err != nil {
 		log.Printf("[Video] Runway request error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Runway API error: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Runway API error: "+err.Error())
 		return
 	}
 	log.Printf("[Video] Runway response status=%d body=%s", status, string(data))
 	if status >= 400 {
-		// Return the full Runway error to the frontend so it's visible in the browser
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":  "Runway error (" + fmt.Sprintf("%d", status) + "): " + string(data),
+			"error":  gin.H{"code": "SERVER_ERROR", "message": "Runway error (" + fmt.Sprintf("%d", status) + ")."},
 			"detail": string(data),
 		})
 		return
@@ -247,7 +242,7 @@ func GenerateVideoHandler(c *gin.Context) {
 
 	var task runwayTaskStatus
 	if err := json.Unmarshal(data, &task); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse Runway response"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse Runway response.")
 		return
 	}
 
@@ -264,28 +259,31 @@ func GenerateVideoHandler(c *gin.Context) {
 func GetVideoStatusHandler(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "taskId is required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "taskId is required.")
 		return
 	}
 
 	if os.Getenv("RUNWAY_API_KEY") == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Video generation not configured."})
+		utils.APIError(c, http.StatusServiceUnavailable, "SERVER_ERROR", "Video generation not configured.")
 		return
 	}
 
 	data, status, err := runwayRequest("GET", "/tasks/"+taskID, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Runway API error: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Runway API error: "+err.Error())
 		return
 	}
 	if status >= 400 {
-		c.JSON(status, gin.H{"error": "Failed to fetch task", "detail": string(data)})
+		c.JSON(status, gin.H{
+			"error":  gin.H{"code": "SERVER_ERROR", "message": "Failed to fetch task."},
+			"detail": string(data),
+		})
 		return
 	}
 
 	var task runwayTaskStatus
 	if err := json.Unmarshal(data, &task); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse Runway response"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse Runway response.")
 		return
 	}
 
@@ -336,17 +334,17 @@ func GetVideoStatusHandler(c *gin.Context) {
 func CancelVideoTaskHandler(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "taskId is required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "taskId is required.")
 		return
 	}
 
 	data, status, err := runwayRequest("DELETE", "/tasks/"+taskID, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", err.Error())
 		return
 	}
 	if status >= 400 {
-		c.JSON(status, gin.H{"error": string(data)})
+		utils.APIError(c, status, "SERVER_ERROR", string(data))
 		return
 	}
 

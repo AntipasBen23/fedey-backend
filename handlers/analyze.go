@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -36,13 +37,13 @@ Job Description:
 func AnalyzeHandler(c *gin.Context) {
 	var req AnalyzeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Furci couldn't access her brain (API Key missing). Please check your backend configuration."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
@@ -66,14 +67,14 @@ func AnalyzeHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call OpenAI API: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to call OpenAI API.")
 		return
 	}
 
 	var report StrategyReport
 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &report)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse OpenAI response: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse OpenAI response.")
 		return
 	}
 

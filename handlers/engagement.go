@@ -14,14 +14,14 @@ import (
 // GetEngagementsHandler returns pending engagement events for the dashboard feed.
 func GetEngagementsHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -34,14 +34,14 @@ func GetEngagementsHandler(c *gin.Context) {
 // ApproveEngagementHandler manually sends a proposed reply.
 func ApproveEngagementHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -50,7 +50,7 @@ func ApproveEngagementHandler(c *gin.Context) {
 
 	var event models.EngagementEvent
 	if err := database.DB.Where("user_id = ?", uid).First(&event, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Engagement event not found"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Engagement event not found.")
 		return
 	}
 
@@ -59,7 +59,7 @@ func ApproveEngagementHandler(c *gin.Context) {
 
 	_, success, err := utils.PostSingleTweetToX(account.AccessToken, event.ProposedReply)
 	if !success {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send reply: %v", err)})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", fmt.Sprintf("Failed to send reply: %v", err))
 		return
 	}
 
@@ -70,14 +70,14 @@ func ApproveEngagementHandler(c *gin.Context) {
 // ToggleGhostModeHandler switches the autonomous engagement flag.
 func ToggleGhostModeHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -85,13 +85,13 @@ func ToggleGhostModeHandler(c *gin.Context) {
 		Enabled bool `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid payload.")
 		return
 	}
 
 	err := database.DB.Model(&models.SocialAccount{}).Where("user_id = ?", uid).Update("ghost_mode_enabled", req.Enabled).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Ghost Mode settings"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to update Ghost Mode settings.")
 		return
 	}
 

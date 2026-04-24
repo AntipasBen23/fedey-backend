@@ -9,6 +9,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -20,14 +21,14 @@ type ChatRequest struct {
 func ChatWithFurciHandler(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -95,7 +96,7 @@ func ChatWithFurciHandler(c *gin.Context) {
 
 	if err != nil {
 		fmt.Printf("[CHAT] API ERROR: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Furci's neural link is unstable. Try again."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Furci's neural link is unstable. Try again.")
 		return
 	}
 

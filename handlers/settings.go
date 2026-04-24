@@ -5,6 +5,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,19 +17,19 @@ type ToggleAutoPilotRequest struct {
 func ToggleAutoPilotHandler(c *gin.Context) {
 	var req ToggleAutoPilotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -37,7 +38,7 @@ func ToggleAutoPilotHandler(c *gin.Context) {
 		Update("auto_pilot_enabled", req.Enabled)
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Auto-Pilot status"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to update Auto-Pilot status.")
 		return
 	}
 

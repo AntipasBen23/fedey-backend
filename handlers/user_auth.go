@@ -287,7 +287,7 @@ type RegisterRequest struct {
 func RegisterHandler(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Name, email, and password are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Name, email, and password are required.")
 		return
 	}
 
@@ -296,13 +296,13 @@ func RegisterHandler(c *gin.Context) {
 
 	// Validate email format
 	if !regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`).MatchString(req.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Please enter a valid email address."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please enter a valid email address.")
 		return
 	}
 
 	// Validate password strength
 	if err := validatePassword(req.Password); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -314,8 +314,8 @@ func RegisterHandler(c *gin.Context) {
 			resendVerificationCode(existing)
 			// Return the same shape as a fresh registration so the UI can show the verify form.
 			c.JSON(http.StatusCreated, gin.H{
-				"message":          "Check your email for a 6-digit verification code.",
-				"userId":           existing.ID,
+				"message":           "Check your email for a 6-digit verification code.",
+				"userId":            existing.ID,
 				"needsVerification": true,
 			})
 		} else {
@@ -328,7 +328,7 @@ func RegisterHandler(c *gin.Context) {
 	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Registration failed. Please try again."})
+		utils.APIError(c, http.StatusInternalServerError, "REGISTRATION_FAILED", "Registration failed. Please try again.")
 		return
 	}
 
@@ -339,7 +339,7 @@ func RegisterHandler(c *gin.Context) {
 		Plan:         "free",
 	}
 	if err := database.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Registration failed. Please try again."})
+		utils.APIError(c, http.StatusInternalServerError, "REGISTRATION_FAILED", "Registration failed. Please try again.")
 		return
 	}
 
@@ -362,12 +362,12 @@ type VerifyEmailRequest struct {
 func VerifyEmailHandler(c *gin.Context) {
 	var req VerifyEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID and verification code are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "User ID and verification code are required.")
 		return
 	}
 
 	if err := checkVerifyRateLimit(req.UserID); err != nil {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusTooManyRequests, "RATE_LIMITED", err.Error())
 		return
 	}
 
@@ -376,7 +376,7 @@ func VerifyEmailHandler(c *gin.Context) {
 		Order("created_at desc").First(&v).Error
 	if err != nil {
 		recordFailedVerify(req.UserID)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired code. Request a new one."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid or expired code. Request a new one.")
 		return
 	}
 
@@ -388,12 +388,12 @@ func VerifyEmailHandler(c *gin.Context) {
 
 	access, err := issueAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Verification succeeded but login failed. Please log in manually."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Verification succeeded but login failed. Please log in manually.")
 		return
 	}
 	refresh, exp, err := issueRefreshToken(user.ID, false)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Verification succeeded but session failed. Please log in manually."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Verification succeeded but session failed. Please log in manually.")
 		return
 	}
 
@@ -413,7 +413,7 @@ type ResendCodeRequest struct {
 func ResendCodeHandler(c *gin.Context) {
 	var req ResendCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "User ID is required.")
 		return
 	}
 
@@ -457,41 +457,44 @@ type LoginRequest struct {
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and password are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Email and password are required.")
 		return
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := checkLoginRateLimit(req.Email); err != nil {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusTooManyRequests, "RATE_LIMITED", err.Error())
 		return
 	}
 
 	var user models.User
 	if database.DB.Where("email = ?", req.Email).First(&user).Error != nil {
 		recordFailedLogin(req.Email)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid email or password.")
 		return
 	}
 
 	if user.PasswordHash == "" {
 		// Don't reveal that this account uses Google — just fail generically.
 		recordFailedLogin(req.Email)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid email or password.")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		recordFailedLogin(req.Email)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid email or password.")
 		return
 	}
 
 	if !user.IsVerified {
 		resendVerificationCode(user)
 		c.JSON(http.StatusForbidden, gin.H{
-			"error":             "Your email isn't verified yet. We've sent a new code.",
+			"error": gin.H{
+				"code":    "UNVERIFIED_EMAIL",
+				"message": "Your email isn't verified yet. We've sent a new code.",
+			},
 			"needsVerification": true,
 			"userId":            user.ID,
 		})
@@ -506,12 +509,12 @@ func LoginHandler(c *gin.Context) {
 
 	access, err := issueAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed. Please try again."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Login failed. Please try again.")
 		return
 	}
 	refresh, exp, err := issueRefreshToken(user.ID, req.RememberMe)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed. Please try again."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Login failed. Please try again.")
 		return
 	}
 
@@ -535,21 +538,21 @@ func RefreshTokenHandler(c *gin.Context) {
 		}
 	}
 	if refreshTokenStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please log in again."})
+		utils.APIError(c, http.StatusUnauthorized, "SESSION_EXPIRED", "Session expired. Please log in again.")
 		return
 	}
 
 	var rt models.RefreshToken
 	if database.DB.Where("token = ? AND expires_at > ?", refreshTokenStr, time.Now()).First(&rt).Error != nil {
 		clearAuthCookies(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please log in again."})
+		utils.APIError(c, http.StatusUnauthorized, "SESSION_EXPIRED", "Session expired. Please log in again.")
 		return
 	}
 
 	var user models.User
 	if database.DB.First(&user, rt.UserID).Error != nil {
 		clearAuthCookies(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found."})
+		utils.APIError(c, http.StatusUnauthorized, "NOT_FOUND", "User not found.")
 		return
 	}
 
@@ -558,13 +561,13 @@ func RefreshTokenHandler(c *gin.Context) {
 	rememberMe := time.Until(rt.ExpiresAt) > 8*24*time.Hour // was a 30-day token
 	newRefresh, exp, err := issueRefreshToken(user.ID, rememberMe)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Session renewal failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Session renewal failed.")
 		return
 	}
 
 	access, err := issueAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Session renewal failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Session renewal failed.")
 		return
 	}
 
@@ -582,14 +585,14 @@ type GoogleAuthRequest struct {
 func GoogleAuthHandler(c *gin.Context) {
 	var req GoogleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Google ID token is required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Google ID token is required.")
 		return
 	}
 
 	// Verify the Google ID token with Google's tokeninfo endpoint
 	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + req.IDToken)
 	if err != nil || resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Google sign-in failed. Please try again."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Google sign-in failed. Please try again.")
 		return
 	}
 	defer resp.Body.Close()
@@ -603,14 +606,14 @@ func GoogleAuthHandler(c *gin.Context) {
 		Aud           string `json:"aud"` // must match our client ID
 	}
 	if err := json.Unmarshal(body, &gData); err != nil || gData.Email == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Could not verify Google account."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Could not verify Google account.")
 		return
 	}
 
 	// Optionally verify audience
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	if clientID != "" && gData.Aud != clientID {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Google sign-in client mismatch."})
+		utils.APIError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Google sign-in client mismatch.")
 		return
 	}
 
@@ -633,7 +636,7 @@ func GoogleAuthHandler(c *gin.Context) {
 				"job_description":      "",
 				"platform_context":     "",
 			}).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed. Please try again.")
 				return
 			}
 			user = deleted
@@ -648,7 +651,7 @@ func GoogleAuthHandler(c *gin.Context) {
 				Plan:       "free",
 			}
 			if err := database.DB.Create(&user).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed. Please try again."})
+				utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed. Please try again.")
 				return
 			}
 		}
@@ -664,12 +667,12 @@ func GoogleAuthHandler(c *gin.Context) {
 
 	access, err := issueAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed.")
 		return
 	}
 	refresh, exp, err := issueRefreshToken(user.ID, req.RememberMe)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sign-in failed."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed.")
 		return
 	}
 
@@ -686,14 +689,14 @@ type ForgotPasswordRequest struct {
 func ForgotPasswordHandler(c *gin.Context) {
 	var req ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Email is required.")
 		return
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := checkForgotRateLimit(req.Email); err != nil {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusTooManyRequests, "RATE_LIMITED", err.Error())
 		return
 	}
 
@@ -733,24 +736,24 @@ type ResetPasswordRequest struct {
 func ResetPasswordHandler(c *gin.Context) {
 	var req ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Token and new password are required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Token and new password are required.")
 		return
 	}
 
 	if err := validatePassword(req.Password); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var prt models.PasswordResetToken
 	if database.DB.Where("token = ? AND used = false AND expires_at > ?", req.Token, time.Now()).First(&prt).Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "This reset link is invalid or has expired. Please request a new one."})
+		utils.APIError(c, http.StatusBadRequest, "SESSION_EXPIRED", "This reset link is invalid or has expired. Please request a new one.")
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Password reset failed. Please try again."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Password reset failed. Please try again.")
 		return
 	}
 
@@ -789,7 +792,7 @@ func GetMeHandler(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	var user models.User
 	if database.DB.First(&user, userID).Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found."})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "User not found.")
 		return
 	}
 	c.JSON(http.StatusOK, userJSON(user))
@@ -805,24 +808,24 @@ func SetUsernameHandler(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	var req SetUsernameRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Username) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username is required."})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Username is required.")
 		return
 	}
 	username := strings.ToLower(strings.TrimSpace(req.Username))
 	// validate: only alphanumeric + underscore, 3-20 chars
 	matched, _ := regexp.MatchString(`^[a-z0-9_]{3,20}$`, username)
 	if !matched {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be 3-20 characters, letters/numbers/underscores only."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Username must be 3-20 characters, letters/numbers/underscores only.")
 		return
 	}
 	// check uniqueness
 	var existing models.User
 	if database.DB.Where("username = ? AND id != ?", username, userID).First(&existing).Error == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "That username is already taken."})
+		utils.APIError(c, http.StatusConflict, "CONFLICT", "That username is already taken.")
 		return
 	}
 	if err := database.DB.Model(&models.User{}).Where("id = ?", userID).Update("username", username).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save username."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to save username.")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"username": username})
@@ -841,7 +844,7 @@ func UpdateOnboardingHandler(c *gin.Context) {
 
 	var req UpdateOnboardingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 

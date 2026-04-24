@@ -10,6 +10,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -40,15 +41,15 @@ func GetTrendsHandler(c *gin.Context) {
 	client := openai.NewClient(apiKey)
 
 	prompt := fmt.Sprintf(`
-		You are a world-class social media trend analyst. 
-		Based on this user's brand identity: "%s", 
+		You are a world-class social media trend analyst.
+		Based on this user's brand identity: "%s",
 		list 10 highly relevant, "viral", or "insightful" trending topics happening RIGHT NOW on X (Twitter).
 		Return the response as a valid JSON object with a "trends" key containing an array of objects.
 		Each object MUST have:
 		- "topic": Short, catchy topic name.
 		- "engagement": One of ["Explosive", "High", "Growing", "Insightful"].
 		- "description": 1-2 sentences explaining why this is trending and the unique angle.
-		
+
 		Ensure the topics are specific and professional.
 	`, strategy.IdentityAudit)
 
@@ -65,7 +66,7 @@ func GetTrendsHandler(c *gin.Context) {
 
 	if err != nil {
 		fmt.Printf("[TRENDS] API ERROR: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to listen for trends"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to listen for trends.")
 		return
 	}
 
@@ -102,7 +103,7 @@ type ReactRequest struct {
 func ReactToTrendHandler(c *gin.Context) {
 	var req ReactRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 
@@ -118,9 +119,9 @@ func ReactToTrendHandler(c *gin.Context) {
 	prompt := fmt.Sprintf(`
 		Trend: %s
 		User Brand Context: %s
-		
-		Draft a viral, high-hook post reacting to this trend. 
-		The tone should be professional yet provocative. 
+
+		Draft a viral, high-hook post reacting to this trend.
+		The tone should be professional yet provocative.
 		Focus on a unique angle that others are missing.
 		Return the response as a simple text string.
 	`, req.Topic, strategy.IdentityAudit)
@@ -136,7 +137,7 @@ func ReactToTrendHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate reaction"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to generate reaction.")
 		return
 	}
 
@@ -154,14 +155,14 @@ type ScheduleReactionRequest struct {
 func ScheduleReactionHandler(c *gin.Context) {
 	var req ScheduleReactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -174,7 +175,7 @@ func ScheduleReactionHandler(c *gin.Context) {
 	query.Find(&accounts)
 
 	if len(accounts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No connected accounts found for " + req.Platform})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "No connected accounts found for "+req.Platform+".")
 		return
 	}
 

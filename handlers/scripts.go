@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -198,18 +199,18 @@ Return ONLY valid JSON matching this exact schema (no markdown, no explanation):
 func GenerateScriptHandler(c *gin.Context) {
 	var req ScriptRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	if req.Topic == "" || req.Format == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "topic and format are required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "topic and format are required.")
 		return
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
@@ -237,7 +238,7 @@ func GenerateScriptHandler(c *gin.Context) {
 	case "thread":
 		prompt = fmt.Sprintf(threadScriptPrompt, req.Topic, toneStyle)
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "format must be one of: video_script, carousel, thread"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "format must be one of: video_script, carousel, thread.")
 		return
 	}
 
@@ -258,7 +259,7 @@ func GenerateScriptHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate script: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to generate script.")
 		return
 	}
 
@@ -269,21 +270,21 @@ func GenerateScriptHandler(c *gin.Context) {
 	case "video_script":
 		var v VideoScript
 		if err := json.Unmarshal([]byte(raw), &v); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse video script"})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse video script.")
 			return
 		}
 		result.Video = &v
 	case "carousel":
 		var cr CarouselScript
 		if err := json.Unmarshal([]byte(raw), &cr); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse carousel script"})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse carousel script.")
 			return
 		}
 		result.Carousel = &cr
 	case "thread":
 		var t ThreadScript
 		if err := json.Unmarshal([]byte(raw), &t); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse thread script"})
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse thread script.")
 			return
 		}
 		result.Thread = &t

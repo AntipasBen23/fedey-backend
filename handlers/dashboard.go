@@ -5,6 +5,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,14 +21,14 @@ type DashboardData struct {
 
 func GetDashboardHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 

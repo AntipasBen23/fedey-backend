@@ -46,7 +46,7 @@ func RateLimiter() gin.HandlerFunc {
 		limiter := globalLimiter.GetLimiter(c.ClientIP())
 		if !limiter.Allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "Furci is processing your requests. Please give us a moment to maintain peak performance.",
+				"error": gin.H{"code": "RATE_LIMITED", "message": "Too many requests. Please wait a moment."},
 			})
 			return
 		}
@@ -62,7 +62,7 @@ func ExpensiveActionLimiter() gin.HandlerFunc {
 		limiter := aiLimiter.GetLimiter(c.ClientIP())
 		if !limiter.Allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "AI Neural Engine is currently optimizing. Please wait a few seconds before your next generation.",
+				"error": gin.H{"code": "RATE_LIMITED", "message": "AI engine is busy. Please wait a few seconds before your next generation."},
 			})
 			return
 		}

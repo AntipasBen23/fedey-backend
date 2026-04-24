@@ -7,6 +7,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -127,7 +128,7 @@ func AdminVisitorSessionsHandler(c *gin.Context) {
 func AdminVisitorDetailHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "visitor key required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "Visitor key required.")
 		return
 	}
 

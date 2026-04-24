@@ -10,6 +10,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -30,20 +31,20 @@ type CreatePostRequest struct {
 
 func CreatePostHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
 	var req CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
@@ -51,7 +52,7 @@ func CreatePostHandler(c *gin.Context) {
 	var accounts []models.SocialAccount
 	database.DB.Where("user_id = ? AND platform IN ?", uid, req.Platforms).Find(&accounts)
 	if len(accounts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No connected accounts found for selected platforms"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "No connected accounts found for selected platforms.")
 		return
 	}
 
@@ -67,7 +68,7 @@ func CreatePostHandler(c *gin.Context) {
 			parsed, err = time.Parse("2006-01-02T15:04", req.ScheduledAt)
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid scheduledAt format"})
+			utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid scheduledAt format.")
 			return
 		}
 		scheduledTime = parsed
@@ -103,13 +104,13 @@ type AIPolishRequest struct {
 func AIPolishHandler(c *gin.Context) {
 	var req AIPolishRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
@@ -127,7 +128,7 @@ func AIPolishHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI Polish failed"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "AI Polish failed.")
 		return
 	}
 
@@ -136,33 +137,33 @@ func AIPolishHandler(c *gin.Context) {
 
 func UpdatePostHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid post ID"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid post ID.")
 		return
 	}
 
 	var req UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload: " + err.Error()})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	var post models.ScheduledPost
 	if err := database.DB.Where("user_id = ?", uid).First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Post not found.")
 		return
 	}
 
@@ -187,7 +188,7 @@ func UpdatePostHandler(c *gin.Context) {
 			}
 		}
 		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid scheduledAt format. Expected ISO8601."})
+			utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid scheduledAt format. Expected ISO8601.")
 			return
 		}
 		post.ScheduledAt = parsed
@@ -201,7 +202,7 @@ func UpdatePostHandler(c *gin.Context) {
 	}
 
 	if err := database.DB.Save(&post).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update post"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to update post.")
 		return
 	}
 
@@ -210,33 +211,33 @@ func UpdatePostHandler(c *gin.Context) {
 
 func DeletePostHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid post ID"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid post ID.")
 		return
 	}
 
 	// Verify it exists and belongs to this user
 	var post models.ScheduledPost
 	if err := database.DB.Where("user_id = ?", uid).First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Post not found.")
 		return
 	}
 
 	if err := database.DB.Delete(&post).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete post"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to delete post.")
 		return
 	}
 

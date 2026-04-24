@@ -12,6 +12,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
@@ -91,19 +92,19 @@ Product Summary:
 func CalendarHandler(c *gin.Context) {
 	var req CalendarRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -128,7 +129,7 @@ func CalendarHandler(c *gin.Context) {
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
@@ -162,14 +163,14 @@ func CalendarHandler(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate calendar: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to generate calendar.")
 		return
 	}
 
 	var calRes CalendarResponse
 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &calRes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse calendar: " + err.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse calendar.")
 		return
 	}
 
@@ -189,14 +190,14 @@ func CalendarHandler(c *gin.Context) {
 
 func GetCalendarStatusHandler(c *gin.Context) {
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -271,19 +272,19 @@ func ApproveCalendarHandler(c *gin.Context) {
 	var req ApproveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("[Approve] JSON Bind Error: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload: " + err.Error()})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not initialized"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not initialized.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
@@ -291,14 +292,14 @@ func ApproveCalendarHandler(c *gin.Context) {
 	var cal models.ContentCalendar
 	if err := database.DB.Where("user_id = ? AND status = ?", uid, "draft").Order("created_at desc").First(&cal).Error; err != nil {
 		log.Printf("[Approve] Draft Fetch Error: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "No draft calendar found to approve"})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "No draft calendar found to approve.")
 		return
 	}
 
 	var items []CalendarItem
 	if err := json.Unmarshal([]byte(cal.ContentJSON), &items); err != nil {
 		log.Printf("[Approve] JSON Unmarshal Error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse calendar content"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse calendar content.")
 		return
 	}
 
@@ -306,7 +307,7 @@ func ApproveCalendarHandler(c *gin.Context) {
 	var accounts []models.SocialAccount
 	database.DB.Where("user_id = ?", uid).Find(&accounts)
 	if len(accounts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No social accounts connected. Please connect X or LinkedIn first."})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "No social accounts connected. Please connect X or LinkedIn first.")
 		return
 	}
 

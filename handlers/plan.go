@@ -15,6 +15,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,7 +38,7 @@ func getOrCreatePrefs() (*models.UserPreferences, error) {
 func GetPlanHandler(c *gin.Context) {
 	prefs, err := getOrCreatePrefs()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not load preferences"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Could not load preferences.")
 		return
 	}
 	plan := prefs.Plan
@@ -55,9 +56,7 @@ func GetPlanHandler(c *gin.Context) {
 func UpgradePlanHandler(c *gin.Context) {
 	secret := os.Getenv("UPGRADE_SECRET")
 	if secret == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Pro upgrades are not yet configured. Set UPGRADE_SECRET on the server.",
-		})
+		utils.APIError(c, http.StatusServiceUnavailable, "SERVER_ERROR", "Pro upgrades are not yet configured.")
 		return
 	}
 
@@ -65,22 +64,22 @@ func UpgradePlanHandler(c *gin.Context) {
 		UpgradeCode string `json:"upgradeCode"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.UpgradeCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "upgradeCode is required"})
+		utils.APIError(c, http.StatusBadRequest, "MISSING_FIELDS", "upgradeCode is required.")
 		return
 	}
 	if body.UpgradeCode != secret {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid upgrade code"})
+		utils.APIError(c, http.StatusForbidden, "FORBIDDEN", "Invalid upgrade code.")
 		return
 	}
 
 	prefs, err := getOrCreatePrefs()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not load preferences"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Could not load preferences.")
 		return
 	}
 
 	if err := database.DB.Model(prefs).Update("plan", "pro").Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upgrade plan"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to upgrade plan.")
 		return
 	}
 

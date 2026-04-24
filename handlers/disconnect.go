@@ -5,6 +5,7 @@ import (
 
 	"github.com/AntipasBen23/fedey-backend/database"
 	"github.com/AntipasBen23/fedey-backend/models"
+	"github.com/AntipasBen23/fedey-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,26 +16,26 @@ type DisconnectRequest struct {
 func DisconnectHandler(c *gin.Context) {
 	var req DisconnectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request.")
 		return
 	}
 
 	if database.DB == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not connected"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Database not connected.")
 		return
 	}
 
 	userIDVal, _ := c.Get("userID")
 	uid, _ := userIDVal.(uint)
 	if uid == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.APIError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required.")
 		return
 	}
 
 	// 1. Find the account first to get the ID and verify existence
 	var account models.SocialAccount
 	if err := database.DB.Where("user_id = ? AND platform = ?", uid, req.Platform).First(&account).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found for " + req.Platform})
+		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "Account not found for "+req.Platform+".")
 		return
 	}
 
@@ -47,7 +48,7 @@ func DisconnectHandler(c *gin.Context) {
 
 	// 3. Finally, delete the social account (soft delete)
 	if err := database.DB.Delete(&account).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to wipe account tokens"})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to wipe account tokens.")
 		return
 	}
 

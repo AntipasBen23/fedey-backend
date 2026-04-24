@@ -42,13 +42,13 @@ type CarouselImageResponse struct {
 func GenerateCarouselImagesHandler(c *gin.Context) {
 	var req CarouselImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request payload.")
 		return
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "API Key missing."})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "API key missing.")
 		return
 	}
 
@@ -58,7 +58,7 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 		prompts = []string{req.CoverPrompt}
 	}
 	if len(prompts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Provide visualPrompts array or coverPrompt"})
+		utils.APIError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Provide visualPrompts array or coverPrompt.")
 		return
 	}
 
@@ -152,7 +152,7 @@ func GenerateCarouselImagesHandler(c *gin.Context) {
 	wg.Wait()
 
 	if firstErr != nil && images[0].URL == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate images: " + firstErr.Error()})
+		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to generate images.")
 		return
 	}
 
