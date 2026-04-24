@@ -552,7 +552,7 @@ func RefreshTokenHandler(c *gin.Context) {
 	var user models.User
 	if database.DB.First(&user, rt.UserID).Error != nil {
 		clearAuthCookies(c)
-		utils.APIError(c, http.StatusUnauthorized, "NOT_FOUND", "User not found.")
+		utils.APIError(c, http.StatusUnauthorized, "SESSION_EXPIRED", "Session expired. Please log in again.")
 		return
 	}
 
@@ -792,7 +792,7 @@ func GetMeHandler(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	var user models.User
 	if database.DB.First(&user, userID).Error != nil {
-		utils.APIError(c, http.StatusNotFound, "NOT_FOUND", "User not found.")
+		utils.APIError(c, http.StatusUnauthorized, "SESSION_EXPIRED", "Session expired. Please log in again.")
 		return
 	}
 	c.JSON(http.StatusOK, userJSON(user))
