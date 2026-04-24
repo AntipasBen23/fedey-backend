@@ -57,7 +57,7 @@ func SendDailyReports() {
 		}
 
 		// 3. Send Email
-		subject := fmt.Sprintf("📊 Furci AI: Your Daily Progress Report (%s)", time.Now().Format("Jan 02"))
+		subject := fmt.Sprintf("Furci AI: Your Daily Progress Report (%s)", time.Now().Format("Jan 02"))
 		err = utils.SendEmail(user.Email, subject, reportContent)
 		if err != nil {
 			log.Printf("[Reporter] Failed to send email to %s: %v", user.Email, err)
@@ -102,7 +102,8 @@ func generateAIProgressReport(user models.User, posts []models.ScheduledPost, en
 		3. A "Strategic Observation" (one insightful suggestion for tomorrow).
 		4. A professional, motivating closing.
 
-		Format the output as a beautiful, high-fidelity HTML email. Use a modern, dark-themed style with #093f67 and white text highlights. 
+		Format the output as a clean, high-fidelity HTML email. Use a modern, dark-themed style with #093f67 and white text highlights.
+		Do NOT use any emojis or icons anywhere in the email — not in headings, bullet points, or body text.
 		Avoid generic templates. Make it feel like a personal briefing from a powerful AI assistant.
 	`, user.Name, string(statsJSON))
 
