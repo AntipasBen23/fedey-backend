@@ -222,6 +222,17 @@ type PasswordResetToken struct {
 	CreatedAt time.Time
 }
 
+// OnboardingOutreach logs every drop-off re-engagement email sent to a user.
+type OnboardingOutreach struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"index;not null" json:"userId"`
+	UserEmail string    `json:"userEmail"`
+	UserName  string    `json:"userName"`
+	StoppedAt string    `json:"stoppedAt"` // the onboarding step they stopped on
+	SentAt    time.Time `json:"sentAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // EngagementEvent tracks find-and-reply social listening events
 type EngagementEvent struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`

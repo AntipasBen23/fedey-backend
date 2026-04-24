@@ -66,6 +66,8 @@ func main() {
 			admin.GET("/activity", handlers.AdminActivityHandler)
 			admin.POST("/reports/test", handlers.TestDailyReportHandler)
 			admin.POST("/strategist/test", handlers.TestStrategistHandler)
+			admin.GET("/outreach", handlers.AdminOutreachLogsHandler)
+			admin.POST("/outreach/trigger", handlers.AdminTriggerOutreachHandler)
 		}
 
 		// ── Public auth routes ──────────────────────────────────────────────

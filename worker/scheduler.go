@@ -14,10 +14,11 @@ import (
 // StartScheduler initializes the background worker that polls for due posts
 func StartScheduler() {
 	ticker := time.NewTicker(1 * time.Minute)
-	listeningTicker := time.NewTicker(15 * time.Minute) // Social listening every 15 mins
-	intelTicker := time.NewTicker(4 * time.Hour)       // Intelligence Hub every 4 hours
-	synergyTicker := time.NewTicker(12 * time.Hour)     // Synergy Matrix every 12 hours
-	fortressTicker := time.NewTicker(12 * time.Hour)    // Digital Fortress every 12 hours
+	listeningTicker  := time.NewTicker(15 * time.Minute) // Social listening every 15 mins
+	intelTicker      := time.NewTicker(4 * time.Hour)    // Intelligence Hub every 4 hours
+	synergyTicker    := time.NewTicker(12 * time.Hour)   // Synergy Matrix every 12 hours
+	fortressTicker   := time.NewTicker(12 * time.Hour)   // Digital Fortress every 12 hours
+	outreachTicker   := time.NewTicker(24 * time.Hour)   // Onboarding outreach once a day
 
 	go func() {
 		lastReportDate := ""
@@ -25,11 +26,11 @@ func StartScheduler() {
 			select {
 			case <-ticker.C:
 				CheckForDuePosts()
-				
+
 				// Daily Progress Report check
 				now := time.Now()
 				today := now.Format("2006-01-02")
-				
+
 				// 1:00 AM -> Strategic Optimization
 				if now.Hour() == 1 && now.Minute() == 0 && lastReportDate != today {
 					RunStrategicOptimization()
@@ -48,6 +49,8 @@ func StartScheduler() {
 				RunDigitalFortress()
 			case <-listeningTicker.C:
 				RunSocialListening()
+			case <-outreachTicker.C:
+				RunOnboardingOutreach()
 			}
 		}
 	}()
