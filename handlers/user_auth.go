@@ -306,15 +306,21 @@ func RegisterHandler(c *gin.Context) {
 		return
 	}
 
-	// Check if email is taken
+	// Check if email is taken — return the same response regardless so
+	// an attacker cannot enumerate which emails are registered.
 	var existing models.User
 	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
-		if existing.IsVerified {
-			c.JSON(http.StatusConflict, gin.H{"error": "An account with this email already exists. Try logging in instead."})
-		} else {
-			// Re-send verification to unverified account
+		if !existing.IsVerified {
 			resendVerificationCode(existing)
-			c.JSON(http.StatusConflict, gin.H{"error": "This email is already registered but not verified. We've sent a new verification code.", "needsVerification": true, "userId": existing.ID})
+			// Return the same shape as a fresh registration so the UI can show the verify form.
+			c.JSON(http.StatusCreated, gin.H{
+				"message":          "Check your email for a 6-digit verification code.",
+				"userId":           existing.ID,
+				"needsVerification": true,
+			})
+		} else {
+			// Verified account exists — return 200, not a specific conflict error.
+			c.JSON(http.StatusOK, gin.H{"message": "Check your email for a 6-digit verification code."})
 		}
 		return
 	}
@@ -412,17 +418,15 @@ func ResendCodeHandler(c *gin.Context) {
 	}
 
 	var user models.User
-	if database.DB.First(&user, req.UserID).Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found."})
-		return
-	}
-	if user.IsVerified {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "This account is already verified."})
+	if database.DB.First(&user, req.UserID).Error != nil || user.IsVerified {
+		// Return the same OK response whether the user doesn't exist or is already verified —
+		// no information disclosed to the caller.
+		c.JSON(http.StatusOK, gin.H{"message": "If there is a pending verification, a new code has been sent."})
 		return
 	}
 
 	resendVerificationCode(user)
-	c.JSON(http.StatusOK, gin.H{"message": "A new verification code has been sent to your email."})
+	c.JSON(http.StatusOK, gin.H{"message": "If there is a pending verification, a new code has been sent."})
 }
 
 func resendVerificationCode(user models.User) {
@@ -472,7 +476,9 @@ func LoginHandler(c *gin.Context) {
 	}
 
 	if user.PasswordHash == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "This account uses Google sign-in. Please continue with Google."})
+		// Don't reveal that this account uses Google — just fail generically.
+		recordFailedLogin(req.Email)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password."})
 		return
 	}
 
