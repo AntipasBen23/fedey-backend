@@ -9,7 +9,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server .
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -o server .
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:latest
