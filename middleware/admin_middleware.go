@@ -20,9 +20,6 @@ func RequireAdmin() gin.HandlerFunc {
 
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 		secret := os.Getenv("ADMIN_JWT_SECRET")
-		if secret == "" {
-			secret = "furci-admin-secret-change-in-prod"
-		}
 
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

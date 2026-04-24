@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
@@ -25,14 +27,52 @@ func TestStrategistHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Strategic optimization cycle triggered in background."})
 }
 
+// ─── Admin brute-force protection (mirrors user login rate limiting) ──────────
+
+var (
+	adminLoginMu       sync.Mutex
+	adminLoginAttempts = map[string]int{}
+	adminLoginLockedAt = map[string]time.Time{}
+)
+
+const adminMaxAttempts = 3              // stricter than user login
+const adminLockoutDuration = 30 * time.Minute
+
+func checkAdminLoginRateLimit(email string) error {
+	adminLoginMu.Lock()
+	defer adminLoginMu.Unlock()
+	if lockedAt, ok := adminLoginLockedAt[email]; ok {
+		if time.Since(lockedAt) < adminLockoutDuration {
+			remaining := adminLockoutDuration - time.Since(lockedAt)
+			return fmt.Errorf("too many failed attempts. Try again in %d minutes.", int(remaining.Minutes())+1)
+		}
+		delete(adminLoginLockedAt, email)
+		delete(adminLoginAttempts, email)
+	}
+	return nil
+}
+
+func recordAdminFailedLogin(email string) {
+	adminLoginMu.Lock()
+	defer adminLoginMu.Unlock()
+	adminLoginAttempts[email]++
+	if adminLoginAttempts[email] >= adminMaxAttempts {
+		adminLoginLockedAt[email] = time.Now()
+		delete(adminLoginAttempts, email)
+	}
+}
+
+func clearAdminLoginAttempts(email string) {
+	adminLoginMu.Lock()
+	defer adminLoginMu.Unlock()
+	delete(adminLoginAttempts, email)
+	delete(adminLoginLockedAt, email)
+}
+
 // ─── Admin JWT ────────────────────────────────────────────────────────────────
 
 func adminSecret() []byte {
-	s := os.Getenv("ADMIN_JWT_SECRET")
-	if s == "" {
-		s = "furci-admin-secret-change-in-prod"
-	}
-	return []byte(s)
+	return []byte(os.Getenv("ADMIN_JWT_SECRET"))
 }
 
 func issueAdminToken(userID uint, email string) (string, error) {
@@ -69,21 +109,10 @@ func AdminSetupHandler(c *gin.Context) {
 		req.Name = "Admin"
 	}
 
-	// If account already exists, update the password (allows password reset)
+	// If an admin already exists, block — setup is one-time only.
 	var existing models.User
 	if database.DB.Where("email = ?", req.Email).First(&existing).Error == nil {
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Setup failed."})
-			return
-		}
-		database.DB.Model(&existing).Update("password_hash", string(hash))
-		token, _ := issueAdminToken(existing.ID, existing.Email)
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Password updated. You can now log in.",
-			"token":   token,
-			"admin":   gin.H{"id": existing.ID, "name": existing.Name, "email": existing.Email},
-		})
+		c.JSON(http.StatusConflict, gin.H{"error": "Admin account already exists. Use the login endpoint."})
 		return
 	}
 
@@ -129,16 +158,25 @@ func AdminLoginHandler(c *gin.Context) {
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
+	if err := checkAdminLoginRateLimit(req.Email); err != nil {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		return
+	}
+
 	var user models.User
 	if database.DB.Where("email = ?", req.Email).First(&user).Error != nil {
+		recordAdminFailedLogin(req.Email)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials."})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		recordAdminFailedLogin(req.Email)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials."})
 		return
 	}
+
+	clearAdminLoginAttempts(req.Email)
 
 	token, err := issueAdminToken(user.ID, user.Email)
 	if err != nil {

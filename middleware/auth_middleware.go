@@ -36,9 +36,6 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 		secret := os.Getenv("JWT_SECRET")
-		if secret == "" {
-			secret = "furci-default-secret-change-in-prod"
-		}
 
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

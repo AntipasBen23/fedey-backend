@@ -111,19 +111,11 @@ func validatePassword(pw string) error {
 // ─── JWT helpers ──────────────────────────────────────────────────────────────
 
 func jwtSecret() []byte {
-	s := os.Getenv("JWT_SECRET")
-	if s == "" {
-		s = "furci-default-secret-change-in-prod"
-	}
-	return []byte(s)
+	return []byte(os.Getenv("JWT_SECRET"))
 }
 
 func refreshSecret() []byte {
-	s := os.Getenv("JWT_REFRESH_SECRET")
-	if s == "" {
-		s = "furci-refresh-secret-change-in-prod"
-	}
-	return []byte(s)
+	return []byte(os.Getenv("JWT_REFRESH_SECRET"))
 }
 
 func issueAccessToken(user models.User) (string, error) {
@@ -190,13 +182,64 @@ func sendPasswordResetEmail(email, name, token string) {
 	}
 }
 
-// ─── Rate limiting (in-memory, per email) ────────────────────────────────────
+// ─── Rate limiting (in-memory, per email / per user ID) ──────────────────────
 
 var (
 	loginAttemptsMu sync.Mutex
 	loginAttempts   = map[string]int{}
 	loginLockedAt   = map[string]time.Time{}
+
+	// Email verify: max 10 wrong attempts per userID per 15 minutes
+	verifyAttemptsMu sync.Mutex
+	verifyAttempts   = map[uint]int{}
+	verifyLockedAt   = map[uint]time.Time{}
+
+	// Forgot password: max 3 requests per email per hour
+	forgotAttemptsMu sync.Mutex
+	forgotAttempts   = map[string]int{}
+	forgotLockedAt   = map[string]time.Time{}
 )
+
+func checkVerifyRateLimit(userID uint) error {
+	verifyAttemptsMu.Lock()
+	defer verifyAttemptsMu.Unlock()
+	if lockedAt, ok := verifyLockedAt[userID]; ok {
+		if time.Since(lockedAt) < 15*time.Minute {
+			return fmt.Errorf("too many incorrect attempts. Please request a new code.")
+		}
+		delete(verifyLockedAt, userID)
+		delete(verifyAttempts, userID)
+	}
+	return nil
+}
+
+func recordFailedVerify(userID uint) {
+	verifyAttemptsMu.Lock()
+	defer verifyAttemptsMu.Unlock()
+	verifyAttempts[userID]++
+	if verifyAttempts[userID] >= 10 {
+		verifyLockedAt[userID] = time.Now()
+		delete(verifyAttempts, userID)
+	}
+}
+
+func checkForgotRateLimit(email string) error {
+	forgotAttemptsMu.Lock()
+	defer forgotAttemptsMu.Unlock()
+	if lockedAt, ok := forgotLockedAt[email]; ok {
+		if time.Since(lockedAt) < time.Hour {
+			return fmt.Errorf("too many reset requests. Please try again in an hour.")
+		}
+		delete(forgotLockedAt, email)
+		delete(forgotAttempts, email)
+	}
+	forgotAttempts[email]++
+	if forgotAttempts[email] >= 3 {
+		forgotLockedAt[email] = time.Now()
+		delete(forgotAttempts, email)
+	}
+	return nil
+}
 
 const maxLoginAttempts = 5
 const lockoutDuration = 10 * time.Minute
@@ -317,10 +360,16 @@ func VerifyEmailHandler(c *gin.Context) {
 		return
 	}
 
+	if err := checkVerifyRateLimit(req.UserID); err != nil {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		return
+	}
+
 	var v models.EmailVerification
 	err := database.DB.Where("user_id = ? AND code = ? AND used = false AND expires_at > ?", req.UserID, strings.TrimSpace(req.Code), time.Now()).
 		Order("created_at desc").First(&v).Error
 	if err != nil {
+		recordFailedVerify(req.UserID)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired code. Request a new one."})
 		return
 	}
@@ -636,6 +685,11 @@ func ForgotPasswordHandler(c *gin.Context) {
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	if err := checkForgotRateLimit(req.Email); err != nil {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Always respond OK to prevent email enumeration
 	var user models.User

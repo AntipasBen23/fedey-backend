@@ -13,8 +13,20 @@ import (
 	"github.com/joho/godotenv"
 )
 
+func mustEnv(key string) {
+	if os.Getenv(key) == "" {
+		log.Fatalf("FATAL: required environment variable %s is not set. Refusing to start.", key)
+	}
+}
+
 func main() {
 	_ = godotenv.Load()
+
+	// Fail fast if critical secrets are missing — never run with fallback/hardcoded values.
+	mustEnv("JWT_SECRET")
+	mustEnv("JWT_REFRESH_SECRET")
+	mustEnv("ADMIN_JWT_SECRET")
+
 	database.InitDB()
 	worker.StartScheduler()
 
