@@ -72,6 +72,12 @@ func InitDB() {
 		log.Fatalf("Failed to auto-migrate database: %v", err)
 	}
 
+	// Replace the full unique index on username with a partial one that only
+	// enforces uniqueness for non-empty values, allowing multiple users to
+	// have no username set yet (stored as '').
+	db.Exec("DROP INDEX IF EXISTS idx_users_username")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username != ''")
+
 	log.Println("Database connection successful and schemas migrated")
 	DB = db
 }

@@ -148,7 +148,7 @@ type UserPreferences struct {
 type User struct {
 	ID                 uint           `gorm:"primaryKey" json:"id"`
 	Name               string         `json:"name"`
-	Username           string         `gorm:"uniqueIndex" json:"username"`
+	Username           string         `json:"username"`
 	Email              string         `gorm:"uniqueIndex;not null" json:"email"`
 	PasswordHash       string         `json:"-"` // empty for Google-only accounts
 	GoogleID           string         `gorm:"index" json:"-"`
