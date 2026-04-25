@@ -283,9 +283,14 @@ func SyncAnalyticsHandler(c *gin.Context) {
 	synced := 0
 	for _, t := range tweets {
 		var post models.ScheduledPost
-		if database.DB.Where("user_id = ? AND external_id = ?", uid, t.ID).First(&post).Error != nil {
+		// Use Find+limit instead of First to avoid GORM logging "record not found" for every
+		// tweet that was posted directly on X (not through Furci).
+		var results []models.ScheduledPost
+		database.DB.Where("user_id = ? AND external_id = ?", uid, t.ID).Limit(1).Find(&results)
+		if len(results) == 0 {
 			continue // not our post
 		}
+		post = results[0]
 
 		total := t.PublicMetrics.LikeCount + t.PublicMetrics.RetweetCount + t.PublicMetrics.ReplyCount
 		impressions := t.PublicMetrics.ImpressionCount

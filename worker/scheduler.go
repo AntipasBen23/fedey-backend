@@ -209,8 +209,14 @@ func failPost(post models.ScheduledPost, reason string) {
 func executePost(post models.ScheduledPost) {
 	var account models.SocialAccount
 	if err := database.DB.First(&account, post.AccountID).Error; err != nil {
-		failPost(post, fmt.Sprintf("account not found (accountId=%d): %v", post.AccountID, err))
-		return
+		// Account was deleted/reconnected — find the user's current active account for this platform
+		if database.DB.Where("user_id = ? AND platform = ?", post.UserID, post.Platform).First(&account).Error != nil {
+			failPost(post, fmt.Sprintf("no active %s account found for user %d", post.Platform, post.UserID))
+			return
+		}
+		// Update the post so future runs don't repeat the lookup
+		database.DB.Model(&post).Update("account_id", account.ID)
+		log.Printf("[Worker] Post %d: account %d not found, remapped to account %d", post.ID, post.AccountID, account.ID)
 	}
 
 	if account.AccessToken == "" {
