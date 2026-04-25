@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
@@ -84,6 +85,7 @@ func StrategyRefineHandler(c *gin.Context) {
 	)
 
 	if err != nil {
+		log.Printf("[StrategyRefine] OpenAI error: %v", err)
 		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to refine strategy.")
 		return
 	}
@@ -91,6 +93,7 @@ func StrategyRefineHandler(c *gin.Context) {
 	var strategy ProfessionalStrategy
 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &strategy)
 	if err != nil {
+		log.Printf("[StrategyRefine] JSON parse error: %v | raw: %s", err, resp.Choices[0].Message.Content)
 		utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Failed to parse refined strategy.")
 		return
 	}
