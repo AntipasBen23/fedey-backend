@@ -40,7 +40,13 @@ INSTRUCTIONS FOR MODE "%s":
 - If mode is "merge": Keep the winning ideas from the Current Strategy but mix in the new Feedback to create a blended, improved version.
 - In both modes, maintain the original Identity Audit.
 
-Format requirements: Return ONLY a valid JSON object matching the ProfessionalStrategy schema.
+Format requirements: Return ONLY a valid JSON object matching this schema exactly:
+{
+  "identityAudit": "A paragraph summarising the user's identity and the recommended pivot.",
+  "trendMonitoring": ["tactic1", "tactic2"],
+  "growthExperiments": ["experiment1", "experiment2"],
+  "analyticsReporting": ["metric1", "metric2"]
+}
 `
 
 func StrategyRefineHandler(c *gin.Context) {
