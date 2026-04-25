@@ -302,15 +302,8 @@ func SyncAnalyticsHandler(c *gin.Context) {
 		engRate := 0.0
 		if impressions > 0 {
 			engRate = float64(total) / float64(impressions) * 100
-		} else if total > 0 {
-			// Fallback estimate if impressions is somehow missing but likes exist
-			impressions = total * 30 
+		} else if total > 0 && impressions > 0 {
 			engRate = float64(total) / float64(impressions) * 100
-		}
-		
-		// Ensure we always save at least a small number of impressions if the post exists
-		if impressions == 0 && post.Status == "posted" {
-			impressions = 1 // At least 1 (the user themselves)
 		}
 
 		analytics := models.PostAnalytics{
