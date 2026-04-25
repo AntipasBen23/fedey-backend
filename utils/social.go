@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -47,6 +48,14 @@ func PostSingleTweetToX(token, text string) (string, bool, error) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusCreated {
+		log.Printf("[X-Post] FAILED status=%d body=%s | ratelimit-limit=%s ratelimit-remaining=%s ratelimit-reset=%s | token-prefix=%.8s...",
+			resp.StatusCode,
+			string(respBody),
+			resp.Header.Get("x-rate-limit-limit"),
+			resp.Header.Get("x-rate-limit-remaining"),
+			resp.Header.Get("x-rate-limit-reset"),
+			token,
+		)
 		return "", false, fmt.Errorf("X API returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
