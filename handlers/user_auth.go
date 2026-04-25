@@ -125,7 +125,7 @@ func issueAccessToken(user models.User) (string, error) {
 		"name":  user.Name,
 		"plan":  user.Plan,
 		"type":  "access",
-		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"exp":   time.Now().Add(time.Hour).Unix(),
 		"iat":   time.Now().Unix(),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret())
