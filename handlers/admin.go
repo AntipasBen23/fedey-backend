@@ -323,11 +323,13 @@ func AdminDeleteUserHandler(c *gin.Context) {
 	// Hard-delete all user content
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.SocialAccount{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.ContentCalendar{})
+	// PostAnalytics has no user_id — must cascade via post IDs before deleting posts
+	database.DB.Unscoped().Where("scheduled_post_id IN (SELECT id FROM scheduled_posts WHERE user_id = ?)", user.ID).Delete(&models.PostAnalytics{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.ScheduledPost{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.UserStrategy{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.EngagementEvent{})
 	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.FollowerSnapshot{})
-	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.PostAnalytics{})
+	database.DB.Unscoped().Where("user_id = ?", user.ID).Delete(&models.OnboardingOutreach{})
 
 	database.DB.Delete(&user)
 

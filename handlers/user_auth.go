@@ -629,37 +629,24 @@ func GoogleAuthHandler(c *gin.Context) {
 	var user models.User
 	result := database.DB.Where("email = ?", gData.Email).First(&user)
 	if result.Error != nil {
-		// If soft-deleted, restore as a fresh user — wipe onboarding so they start from scratch
+		// Check for a soft-deleted tombstone (admin deleted this account).
+		// Hard-delete it so the email is freed, then create a completely fresh
+		// user with a new ID — never restore the old one, which would leak
+		// any data that survived the cascade delete.
 		var deleted models.User
 		if database.DB.Unscoped().Where("email = ?", gData.Email).First(&deleted).Error == nil {
-			if err := database.DB.Unscoped().Model(&deleted).Updates(map[string]interface{}{
-				"deleted_at":           nil,
-				"google_id":            gData.Sub,
-				"is_verified":          true,
-				"name":                 gData.Name,
-				"plan":                 "free",
-				"last_onboarding_step": "",
-				"job_description":      "",
-				"platform_context":     "",
-			}).Error; err != nil {
-				utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed. Please try again.")
-				return
-			}
-			user = deleted
-			user.LastOnboardingStep = ""
-		} else {
-			// Truly new user via Google
-			user = models.User{
-				Name:       gData.Name,
-				Email:      gData.Email,
-				GoogleID:   gData.Sub,
-				IsVerified: true,
-				Plan:       "free",
-			}
-			if err := database.DB.Create(&user).Error; err != nil {
-				utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed. Please try again.")
-				return
-			}
+			database.DB.Unscoped().Delete(&deleted)
+		}
+		user = models.User{
+			Name:       gData.Name,
+			Email:      gData.Email,
+			GoogleID:   gData.Sub,
+			IsVerified: true,
+			Plan:       "free",
+		}
+		if err := database.DB.Create(&user).Error; err != nil {
+			utils.APIError(c, http.StatusInternalServerError, "SERVER_ERROR", "Sign-in failed. Please try again.")
+			return
 		}
 	} else if user.GoogleID == "" {
 		// Existing email-password user — link Google to their account
