@@ -13,6 +13,7 @@ type SocialAccount struct {
 	Platform         string         `gorm:"uniqueIndex:idx_user_platform_context" json:"platform"`
 	AccountType      string         `gorm:"uniqueIndex:idx_user_platform_context" json:"accountType"` // 'old' or 'new'
 	AccessToken      string         `json:"accessToken"`
+	RefreshToken     string         `json:"refreshToken"`  // OAuth refresh token for renewing expired access tokens
 	AutoPilotEnabled bool           `gorm:"default:false" json:"autoPilotEnabled"`
 	GhostModeEnabled bool           `gorm:"default:false" json:"ghostModeEnabled"`
 	SchedulingConfig string         `json:"schedulingConfig"` // JSON string for Mode, Staggering, etc.

@@ -3,6 +3,7 @@ package worker
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -222,6 +223,27 @@ func executePost(post models.ScheduledPost) {
 	if account.AccessToken == "" {
 		failPost(post, fmt.Sprintf("access token is empty for account %d — re-connect %s", account.ID, post.Platform))
 		return
+	}
+
+	// Proactively refresh Twitter OAuth token before posting.
+	// Access tokens expire after 2 hours; refresh ensures the post goes through.
+	if (post.Platform == "twitter" || post.Platform == "x") && account.RefreshToken != "" {
+		clientID := os.Getenv("AUTH_TWITTER_ID")
+		clientSecret := os.Getenv("AUTH_TWITTER_SECRET")
+		if clientID != "" && clientSecret != "" {
+			newAccess, newRefresh, refreshErr := utils.RefreshTwitterToken(clientID, clientSecret, account.RefreshToken)
+			if refreshErr != nil {
+				log.Printf("[Worker] Token refresh failed for account %d: %v", account.ID, refreshErr)
+			} else {
+				updates := map[string]interface{}{"access_token": newAccess}
+				if newRefresh != "" {
+					updates["refresh_token"] = newRefresh
+				}
+				database.DB.Model(&account).Updates(updates)
+				account.AccessToken = newAccess
+				log.Printf("[Worker] Twitter token refreshed for account %d", account.ID)
+			}
+		}
 	}
 
 	var externalID string

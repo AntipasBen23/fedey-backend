@@ -7,11 +7,50 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/models"
 )
+
+// RefreshTwitterToken exchanges a refresh token for a new access token using
+// Twitter's OAuth 2.0 token endpoint. Returns the new access token and a
+// (possibly rotated) refresh token. Both clientID and clientSecret are required.
+func RefreshTwitterToken(clientID, clientSecret, refreshToken string) (accessToken, newRefreshToken string, err error) {
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequest("POST", "https://api.twitter.com/2/oauth2/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(clientID, clientSecret)
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("Twitter token refresh returned %d: %s", resp.StatusCode, string(body))
+		return
+	}
+
+	var result struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if e := json.Unmarshal(body, &result); e != nil {
+		err = e
+		return
+	}
+	return result.AccessToken, result.RefreshToken, nil
+}
 
 // PostToX publishes a single tweet or a thread to X (Twitter).
 func PostToX(token string, post models.ScheduledPost) (string, bool, error) {

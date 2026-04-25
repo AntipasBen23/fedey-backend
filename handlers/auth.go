@@ -12,9 +12,10 @@ import (
 )
 
 type AuthCallbackRequest struct {
-	AccessToken string `json:"accessToken"`
-	Platform    string `json:"platform"`
-	AccountType string `json:"accountType"` // "old" or "new"
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	Platform     string `json:"platform"`
+	AccountType  string `json:"accountType"` // "old" or "new"
 }
 
 func AuthCallbackHandler(c *gin.Context) {
@@ -48,15 +49,21 @@ func AuthCallbackHandler(c *gin.Context) {
 
 	// Now perform the standard Upsert for the current user
 	account := models.SocialAccount{
-		UserID:      uid,
-		Platform:    req.Platform,
-		AccessToken: req.AccessToken,
-		AccountType: req.AccountType,
+		UserID:       uid,
+		Platform:     req.Platform,
+		AccessToken:  req.AccessToken,
+		RefreshToken: req.RefreshToken,
+		AccountType:  req.AccountType,
+	}
+
+	updateCols := []string{"access_token", "updated_at", "deleted_at"}
+	if req.RefreshToken != "" {
+		updateCols = append(updateCols, "refresh_token")
 	}
 
 	err = database.DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "platform"}, {Name: "account_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"access_token", "updated_at", "deleted_at"}),
+		DoUpdates: clause.AssignmentColumns(updateCols),
 	}).Create(&account).Error
 
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/AntipasBen23/fedey-backend/database"
@@ -241,6 +242,27 @@ func SyncAnalyticsHandler(c *gin.Context) {
 	}
 
 	log.Printf("[Analytics] Syncing for account %d (platform=%s)", account.ID, account.Platform)
+
+	// Proactively refresh the OAuth token before hitting the Twitter API.
+	// Twitter OAuth 2.0 access tokens expire after 2 hours.
+	if account.RefreshToken != "" {
+		clientID := os.Getenv("AUTH_TWITTER_ID")
+		clientSecret := os.Getenv("AUTH_TWITTER_SECRET")
+		if clientID != "" && clientSecret != "" {
+			newAccess, newRefresh, refreshErr := utils.RefreshTwitterToken(clientID, clientSecret, account.RefreshToken)
+			if refreshErr != nil {
+				log.Printf("[Analytics] Token refresh failed: %v", refreshErr)
+			} else {
+				updates := map[string]interface{}{"access_token": newAccess}
+				if newRefresh != "" {
+					updates["refresh_token"] = newRefresh
+				}
+				database.DB.Model(&account).Updates(updates)
+				account.AccessToken = newAccess
+				log.Printf("[Analytics] Twitter token refreshed for account %d", account.ID)
+			}
+		}
+	}
 
 	// 1. Fetch Twitter user profile (ID + follower count)
 	userID, followerCount, profileErr := fetchTwitterProfile(account.AccessToken)
