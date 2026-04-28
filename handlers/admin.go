@@ -415,9 +415,22 @@ func AdminDevicesHandler(c *gin.Context) {
 // ─── GET /v1/admin/activity ───────────────────────────────────────────────────
 
 func AdminActivityHandler(c *gin.Context) {
-	// Recent 50 scheduled posts
-	var posts []models.ScheduledPost
-	database.DB.Order("created_at desc").Limit(50).Find(&posts)
+	type ActivityRow struct {
+		Content   string    `gorm:"column:content"`
+		Platform  string    `gorm:"column:platform"`
+		Status    string    `gorm:"column:status"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+		UserEmail string    `gorm:"column:user_email"`
+		UserName  string    `gorm:"column:user_name"`
+	}
+
+	var rows []ActivityRow
+	database.DB.Table("scheduled_posts").
+		Select("scheduled_posts.content, scheduled_posts.platform, scheduled_posts.status, scheduled_posts.created_at, users.email as user_email, users.name as user_name").
+		Joins("JOIN users ON users.id = scheduled_posts.user_id").
+		Order("scheduled_posts.created_at desc").
+		Limit(50).
+		Scan(&rows)
 
 	type ActivityItem struct {
 		Type      string    `json:"type"`
@@ -425,20 +438,24 @@ func AdminActivityHandler(c *gin.Context) {
 		Platform  string    `json:"platform"`
 		Status    string    `json:"status"`
 		CreatedAt time.Time `json:"createdAt"`
+		UserEmail string    `json:"userEmail"`
+		UserName  string    `json:"userName"`
 	}
 
-	items := make([]ActivityItem, 0, len(posts))
-	for _, p := range posts {
-		snippet := p.Content
+	items := make([]ActivityItem, 0, len(rows))
+	for _, r := range rows {
+		snippet := r.Content
 		if len(snippet) > 80 {
 			snippet = snippet[:80] + "…"
 		}
 		items = append(items, ActivityItem{
 			Type:      "post",
 			Detail:    snippet,
-			Platform:  p.Platform,
-			Status:    p.Status,
-			CreatedAt: p.CreatedAt,
+			Platform:  r.Platform,
+			Status:    r.Status,
+			CreatedAt: r.CreatedAt,
+			UserEmail: r.UserEmail,
+			UserName:  r.UserName,
 		})
 	}
 
